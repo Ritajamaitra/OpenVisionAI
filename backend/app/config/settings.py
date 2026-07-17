@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict # type: ignore
 
@@ -6,15 +7,23 @@ from pydantic_settings import BaseSettings, SettingsConfigDict # type: ignore
 class Settings(BaseSettings):
     APP_NAME: str = "OpenVisionAI"
     APP_VERSION: str = "0.1.0"
-    APP_ENV: str = "development"
+    ENV: str = "development"
 
     HOST: str = "0.0.0.0"
     PORT: int = 8000
+    DB_SERVER: str
+    DB_PORT: int = 1433
+    DB_NAME: str
+    DB_USERNAME: str
+    DB_PASSWORD: str
+    DB_DRIVER: str
+    DB_TRUST_CERTIFICATE: str = "no"
 
     LOG_LEVEL: str = "INFO"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_prefix="OPENVISIONAI_",
+        env_file=Path(__file__).resolve().parent.parent / ".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
     )
