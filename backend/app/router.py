@@ -1,5 +1,5 @@
 from fastapi import APIRouter # type: ignore
-from app.api.routes.health import router as health_router # type: ignore
+from app.health import router as health_router # type: ignore
 
 api_router = APIRouter()
 

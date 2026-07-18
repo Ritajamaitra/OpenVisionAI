@@ -1,6 +1,6 @@
 from fastapi import FastAPI # type: ignore
 
-from app.api.api import api_router # type: ignore
+from app.router import api_router
 from app.config.settings import settings
 
 app = FastAPI(
