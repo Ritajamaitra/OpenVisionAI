@@ -3,9 +3,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseEntity
 from app.models.project_status import ProjectStatus
-from app.models.user import User
-from app.models.dataset import Dataset
-from app.models.report import Report
 
 class Project(BaseEntity):
     __tablename__ = "projects"
@@ -31,7 +28,7 @@ class Project(BaseEntity):
         default=ProjectStatus.ACTIVE,
     )
 
-    owner: Mapped[User] = relationship(
+    owner: Mapped["User"] = relationship(
         "User",
         back_populates="projects",
     )

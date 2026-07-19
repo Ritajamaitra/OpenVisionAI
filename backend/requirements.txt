@@ -13,3 +13,4 @@ httpx
 sqlalchemy
 pyodbc
 pymysql
+alembic

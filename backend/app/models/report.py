@@ -4,8 +4,6 @@ from sqlalchemy import DateTime, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseEntity
-from app.models.model_registry import ModelRegistry
-from app.models.project import Project
 from app.models.report_status import ReportStatus
 
 
@@ -48,12 +46,12 @@ class Report(BaseEntity):
         default=ReportStatus.GENERATED,
     )
 
-    project: Mapped[Project] = relationship(
+    project: Mapped["Project"] = relationship(
         "Project",
         back_populates="reports",
     )
 
-    model_registry: Mapped[ModelRegistry] = relationship(
+    model_registry: Mapped["ModelRegistry"] = relationship(
         "ModelRegistry",
         back_populates="reports",
     )

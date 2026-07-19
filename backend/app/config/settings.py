@@ -1,7 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import quote_plus
 
-from pydantic_settings import BaseSettings, SettingsConfigDict # type: ignore
+from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore
 
 
 class Settings(BaseSettings):
@@ -27,6 +28,23 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=True,
     )
+
+    @property
+    def database_url(self) -> str:
+        connection_string = (
+            f"DRIVER={{{self.DB_DRIVER}}};"
+            f"SERVER={self.DB_SERVER},{self.DB_PORT};"
+            f"DATABASE={self.DB_NAME};"
+            f"UID={self.DB_USERNAME};"
+            f"PWD={self.DB_PASSWORD};"
+            "Encrypt=yes;"
+            "TrustServerCertificate=no;"
+        )
+
+        return (
+            "mssql+pyodbc:///?odbc_connect="
+            + quote_plus(connection_string)
+        )
 
 
 @lru_cache

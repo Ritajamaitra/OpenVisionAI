@@ -1,12 +1,17 @@
-"""Models package exports.
+"""Models package exports and registration for Alembic."""
 
-Avoid importing model modules at package import time to prevent circular
-import issues. Import specific models directly, e.g. ``from app.models.user import User``.
-"""
+from app.models.base import BaseEntity
+from app.models.dataset import Dataset
+from app.models.model_registry import ModelRegistry
+from app.models.project import Project
+from app.models.report import Report
+from app.models.user import User
 
 __all__ = [
     "BaseEntity",
     "User",
     "Project",
     "Dataset",
+    "ModelRegistry",
+    "Report",
 ]
