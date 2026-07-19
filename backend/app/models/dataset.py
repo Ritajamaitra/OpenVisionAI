@@ -3,8 +3,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseEntity
 from app.models.dataset_status import DatasetStatus
-from app.models.project import Project
-from app.models.model_registry import ModelRegistry
 
 class Dataset(BaseEntity):
     __tablename__ = "datasets"
@@ -52,7 +50,7 @@ class Dataset(BaseEntity):
         default=DatasetStatus.ACTIVE,
     )
 
-    project: Mapped[Project] = relationship(
+    project: Mapped["Project"] = relationship(
         "Project",
         back_populates="datasets",
     )

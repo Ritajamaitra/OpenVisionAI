@@ -2,9 +2,7 @@ from sqlalchemy import Enum, ForeignKey, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseEntity
-from app.models.dataset import Dataset
 from app.models.model_status import ModelStatus
-from app.models.report import Report
 
 class ModelRegistry(BaseEntity):
     __tablename__ = "model_registry"
@@ -60,7 +58,7 @@ class ModelRegistry(BaseEntity):
         default=ModelStatus.ACTIVE,
     )
 
-    dataset: Mapped[Dataset] = relationship(
+    dataset: Mapped["Dataset"] = relationship(
         "Dataset",
         back_populates="models",
     )
