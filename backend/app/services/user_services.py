@@ -6,10 +6,17 @@ from app.services.base_services import BaseService
 
 
 class UserAlreadyExistsError(Exception):
+    """Raised when an email already exists."""
     pass
 
 
 class UsernameAlreadyExistsError(Exception):
+    """Raised when a username already exists."""
+    pass
+
+
+class UserNotFoundError(Exception):
+    """Raised when a user cannot be found."""
     pass
 
 
@@ -21,11 +28,13 @@ class UserService(BaseService[User]):
     def __init__(self):
         super().__init__(UserRepository())
 
-    def create_user(self, db: Session, user: User) -> User:
+    def create_user(
+        self,
+        db: Session,
+        user: User,
+    ) -> User:
         """
-        Business rule:
-        Email must be unique.
-        Username must be unique.
+        Creates a new user after validating uniqueness.
         """
 
         self._validate_unique_email(db, user.email)
@@ -33,19 +42,56 @@ class UserService(BaseService[User]):
 
         return self.repository.create(db, user)
 
-    def _validate_unique_email(self, db: Session, email: str) -> None:
+    def _validate_unique_email(
+        self,
+        db: Session,
+        email: str,
+    ) -> None:
         if self.repository.find_by_email(db, email):
-            raise UserAlreadyExistsError("Email already exists.")
+            raise UserAlreadyExistsError(
+                "Email already exists."
+            )
 
-    def _validate_unique_username(self, db: Session, username: str) -> None:
+    def _validate_unique_username(
+        self,
+        db: Session,
+        username: str,
+    ) -> None:
         if self.repository.find_by_username(db, username):
-            raise UsernameAlreadyExistsError("Username already exists.")
+            raise UsernameAlreadyExistsError(
+                "Username already exists."
+            )
 
-    def get_active_users(self, db: Session) -> list[User]:
+    def get_active_users(
+        self,
+        db: Session,
+    ) -> list[User]:
         return self.repository.find_active_users(db)
 
-    def get_by_email(self, db: Session, email: str) -> User | None:
+    def get_by_email(
+        self,
+        db: Session,
+        email: str,
+    ) -> User | None:
         return self.repository.find_by_email(db, email)
 
-    def get_by_username(self, db: Session, username: str) -> User | None:
+    def get_by_username(
+        self,
+        db: Session,
+        username: str,
+    ) -> User | None:
         return self.repository.find_by_username(db, username)
+
+    def get_user(
+        self,
+        db: Session,
+        user_id: int,
+    ) -> User:
+        user = self.repository.get_by_id(db, user_id)
+
+        if user is None:
+            raise UserNotFoundError(
+                "User not found."
+            )
+
+        return user

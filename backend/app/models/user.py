@@ -30,9 +30,11 @@ class User(BaseEntity):
     )
 
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole),
-        nullable=False,
-    )
+         Enum(UserRole),
+         default=UserRole.USER,
+         server_default=UserRole.USER.value,
+         nullable=False,
+)
 
     is_active: Mapped[bool] = mapped_column(
         Boolean,
