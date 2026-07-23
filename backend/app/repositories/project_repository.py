@@ -20,6 +20,21 @@ class ProjectRepository(BaseRepository[Project]):
             .all()
         )
 
+    def find_by_owner_and_name(
+        self,
+        db: Session,
+        owner_id: int,
+        name: str,
+    ) -> Project | None:
+        return (
+            db.query(Project)
+            .filter(
+                Project.owner_id == owner_id,
+                Project.name == name,
+            )
+            .first()
+        )
+
     def find_active_projects(
         self,
         db: Session,
@@ -28,4 +43,19 @@ class ProjectRepository(BaseRepository[Project]):
             db.query(Project)
             .filter(Project.status == ProjectStatus.ACTIVE)
             .all()
+        )
+
+    def find_by_id_and_owner(
+        self,
+        db: Session,
+        project_id: int,
+        owner_id: int,
+    ) -> Project | None:
+        return (
+            db.query(Project)
+            .filter(
+                Project.id == project_id,
+                Project.owner_id == owner_id,
+            )
+            .first()
         )
