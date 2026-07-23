@@ -5,6 +5,6 @@ api_router = APIRouter()
 
 api_router.include_router(
     health_router,
-    prefix="/api/v1",
+    prefix="/api/health",
     tags=["Health"]
 )
