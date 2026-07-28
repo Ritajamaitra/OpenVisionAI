@@ -1,9 +1,15 @@
 from sqlalchemy import Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
+from sqlalchemy import (
+    Column,
+    Integer,
+    DateTime,
+    func,
+)
 from app.models.base import BaseEntity
+from app.models.project import Project
+from app.models.model_registry import ModelRegistry
 from app.models.dataset_status import DatasetStatus
-
 class Dataset(BaseEntity):
     __tablename__ = "datasets"
 
@@ -59,3 +65,29 @@ class Dataset(BaseEntity):
         "ModelRegistry",
         back_populates="dataset",
     )
+
+    annotations = relationship(
+    "Annotation",
+    backref="dataset",
+    cascade="all, delete-orphan",
+)
+
+    annotated_images = Column(
+    Integer,
+    nullable=False,
+    default=0,
+)
+
+    total_classes = Column(
+    Integer,
+    nullable=False,
+    default=0,
+)
+
+    last_updated = Column(
+    DateTime,
+    nullable=False,
+    server_default=func.now(),
+    onupdate=func.now(),
+)
+

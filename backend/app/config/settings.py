@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote_plus
+from huggingface_hub import login
 
 from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore
 
@@ -23,8 +24,13 @@ class Settings(BaseSettings):
     DB_PASSWORD: str
     DB_DRIVER: str
     DB_TRUST_CERTIFICATE: str = "no"
+    HF_TOKEN: str
+    AZURE_STORAGE_ACCOUNT: str
+    AZURE_STORAGE_KEY: str
+    AZURE_STORAGE_CONTAINER: str
 
     LOG_LEVEL: str = "INFO"
+    
 
     model_config = SettingsConfigDict(
         env_prefix="OPENVISIONAI_",

@@ -61,3 +61,25 @@ class DatasetRepository(BaseRepository[Dataset]):
             )
             .first()
         )
+
+    def update_statistics(
+             self,
+             db: Session,
+             dataset: Dataset,
+    ) -> Dataset:
+        db.add(dataset)
+        db.commit()
+        db.refresh(dataset)
+        return dataset
+
+    def find_dataset_images(
+    self,
+    dataset: Dataset,
+):
+        folder = (
+        f"datasets/"
+        f"project_{dataset.project_id}/"
+        f"dataset_{dataset.id}/"
+        f"images"
+    )
+        return folder

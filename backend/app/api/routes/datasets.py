@@ -9,6 +9,7 @@ from app.schemas.dataset import (
     DatasetResponse,
     DatasetUpdate,
 )
+from app.schemas.statistics import DatasetStatisticsResponse
 from app.services.dataset_services import DatasetService
 
 router = APIRouter(
@@ -151,3 +152,28 @@ def delete_dataset(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         )
+
+@router.get(
+    "/{dataset_id}/statistics",
+    response_model=DatasetStatisticsResponse,
+)
+def dataset_statistics(
+    dataset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+
+    dataset = dataset_service.get_statistics(
+        db=db,
+        dataset_id=dataset_id,
+        current_user=current_user,
+    )
+
+    return DatasetStatisticsResponse(
+        dataset_id=dataset.id,
+        total_images=dataset.total_images,
+        annotated_images=dataset.annotated_images,
+        total_annotations=dataset.total_annotations,
+        total_classes=dataset.total_classes,
+        last_updated=dataset.last_updated,
+    )

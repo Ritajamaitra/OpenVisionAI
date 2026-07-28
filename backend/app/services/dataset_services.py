@@ -160,3 +160,31 @@ class DatasetService(BaseService[Dataset]):
             db=db,
             obj=dataset,
         )
+
+    def update_statistics(
+            self,
+            db: Session,
+            dataset: Dataset,
+    ) -> Dataset:
+        """
+        Update dataset statistics.
+        """
+
+        return self.repository.update_statistics(
+            db=db,
+            dataset=dataset,
+        )
+
+    def get_statistics(
+            self,
+            db: Session,
+            dataset_id: int,
+            current_user: User,
+        ) -> Dataset:
+        return self.get_dataset(
+        db=db,
+        dataset_id=dataset_id,
+        current_user=current_user,
+    )
+
+    

@@ -6,7 +6,7 @@ from app.models.model_registry import ModelRegistry
 from app.models.project import Project
 from app.models.report import Report
 from app.models.user import User
-
+from app.models.annotation import Annotation
 __all__ = [
     "BaseEntity",
     "User",
@@ -14,4 +14,5 @@ __all__ = [
     "Dataset",
     "ModelRegistry",
     "Report",
+    "Annotation",
 ]
