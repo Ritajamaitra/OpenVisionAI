@@ -4,18 +4,19 @@ from app.ai.exporters.yolo_exporter import YOLOExporter
 from app.ai.exporters.zip_exporter import ZipExporter
 
 from app.repositories.annotation_repository import AnnotationRepository
+
 from app.schemas.export import (
     DatasetExportResponse,
     ExportFormat,
 )
+
 from app.services.dataset_services import DatasetService
 from app.storage.azure_storage_blob import AzureBlobStorage
-import inspect
 
 
 class ExportService:
     """
-    Export datasets into YOLO, COCO or Pascal VOC.
+    Export datasets into YOLO, COCO or Pascal VOC formats.
     """
 
     def __init__(self):
@@ -25,9 +26,6 @@ class ExportService:
         self.annotation_repository = AnnotationRepository()
 
         self.storage = AzureBlobStorage()
-        print("Storage class:", type(self.storage))
-        print("Loaded from:", inspect.getfile(AzureBlobStorage))
-        print("Has download_files:", hasattr(self.storage, "download_files"))
 
         self.yolo = YOLOExporter()
 
@@ -45,9 +43,9 @@ class ExportService:
         current_user,
     ) -> DatasetExportResponse:
 
-        # ----------------------------------------
+        # -------------------------------------------------
         # Verify dataset ownership
-        # ----------------------------------------
+        # -------------------------------------------------
 
         dataset = self.dataset_service.get_dataset(
             db=db,
@@ -55,21 +53,20 @@ class ExportService:
             current_user=current_user,
         )
 
-        # ----------------------------------------
-        # Fetch approved annotations
-        # ----------------------------------------
+        # -------------------------------------------------
+        # Fetch annotations
+        # -------------------------------------------------
 
         annotations = (
-            self.annotation_repository
-            .find_approved_annotations(
+            self.annotation_repository.find_dataset_annotations(
                 db=db,
                 dataset_id=dataset.id,
             )
         )
 
-        # ----------------------------------------
-        # Download all images
-        # ----------------------------------------
+        # -------------------------------------------------
+        # Download all dataset images
+        # -------------------------------------------------
 
         image_folder = (
             f"datasets/"
@@ -79,32 +76,32 @@ class ExportService:
         )
 
         images = self.storage.download_files(
-            image_folder,
+            image_folder
         )
 
-        # ----------------------------------------
-        # Generate export files
-        # ----------------------------------------
+        # -------------------------------------------------
+        # Build export files
+        # -------------------------------------------------
 
         if export_format == ExportFormat.YOLO:
 
             export_files = self.yolo.build_labels(
-                annotations,
+                annotations=annotations,
+                images=images,
             )
 
         elif export_format == ExportFormat.COCO:
 
             export_files = {
-                "annotations.json":
-                    self.coco.build(
-                        annotations,
-                    )
+                "annotations.json": self.coco.build(
+                    annotations
+                )
             }
 
         elif export_format == ExportFormat.VOC:
 
             export_files = self.voc.build(
-                annotations,
+                annotations
             )
 
         else:
@@ -113,18 +110,18 @@ class ExportService:
                 "Unsupported export format."
             )
 
-        # ----------------------------------------
-        # Build ZIP
-        # ----------------------------------------
+        # -------------------------------------------------
+        # Create ZIP archive
+        # -------------------------------------------------
 
         zip_bytes = self.zipper.create_zip(
             images=images,
             export_files=export_files,
         )
 
-        # ----------------------------------------
+        # -------------------------------------------------
         # Upload ZIP
-        # ----------------------------------------
+        # -------------------------------------------------
 
         zip_blob = (
             f"datasets/"
@@ -139,9 +136,9 @@ class ExportService:
             data=zip_bytes,
         )
 
-        # ----------------------------------------
-        # Response
-        # ----------------------------------------
+        # -------------------------------------------------
+        # Return response
+        # -------------------------------------------------
 
         return DatasetExportResponse(
             dataset_id=dataset.id,

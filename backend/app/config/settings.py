@@ -25,9 +25,18 @@ class Settings(BaseSettings):
     DB_DRIVER: str
     DB_TRUST_CERTIFICATE: str = "no"
     HF_TOKEN: str
+    DATABRICKS_TOKEN: str
+    DATABRICKS_HOST: str
+    DATABRICKS_JOB_ID: int
     AZURE_STORAGE_ACCOUNT: str
     AZURE_STORAGE_KEY: str
     AZURE_STORAGE_CONTAINER: str
+    AZURE_SUBSCRIPTION_ID: str
+    AZURE_RESOURCE_GROUP: str
+    AZURE_ML_WORKSPACE: str
+    AZURE_TENANT_ID: str
+    AZURE_CLIENT_ID: str
+    AZURE_CLIENT_SECRET: str
 
     LOG_LEVEL: str = "INFO"
     
