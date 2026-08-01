@@ -7,6 +7,7 @@ from app.models.project import Project
 from app.models.report import Report
 from app.models.user import User
 from app.models.annotation import Annotation
+from app.models.training_run import TrainingRun
 __all__ = [
     "BaseEntity",
     "User",
@@ -15,4 +16,5 @@ __all__ = [
     "ModelRegistry",
     "Report",
     "Annotation",
+    "TrainingRun",
 ]

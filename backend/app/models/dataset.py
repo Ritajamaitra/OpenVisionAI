@@ -90,4 +90,9 @@ class Dataset(BaseEntity):
     server_default=func.now(),
     onupdate=func.now(),
 )
+    training_runs = relationship(
+    "TrainingRun",
+    back_populates="dataset",
+    cascade="all, delete-orphan",
+)
 

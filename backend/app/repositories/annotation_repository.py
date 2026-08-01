@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-
+from sqlalchemy import or_
 from app.models.annotation import (
     Annotation,
     AnnotationStatus,
@@ -69,7 +69,10 @@ class AnnotationRepository(BaseRepository[Annotation]):
             db.query(Annotation)
             .filter(
                 Annotation.dataset_id == dataset_id,
-                Annotation.status == AnnotationStatus.APPROVED,
+                or_(
+                    Annotation.status == AnnotationStatus.AUTO_GENERATED,
+                    Annotation.status == AnnotationStatus.APPROVED
+                )
             )
             .all()
         )

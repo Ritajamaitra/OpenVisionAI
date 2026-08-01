@@ -1,7 +1,13 @@
-from azure.storage.blob import BlobServiceClient
+from datetime import datetime, timedelta
 
+from azure.storage.blob import (
+    BlobServiceClient,
+    BlobSasPermissions,
+    generate_blob_sas,
+)
 from app.config.settings import settings
 from app.storage.base_storage import BaseStorage
+from pathlib import Path
 
 
 class AzureBlobStorage(BaseStorage):
@@ -22,28 +28,34 @@ class AzureBlobStorage(BaseStorage):
         self.container = settings.AZURE_STORAGE_CONTAINER
 
     def upload_file(
-        self,
-        blob_path: str,
-        data: bytes,
-    ) -> str:
-
+    self,
+    blob_path: str,
+    data: bytes,
+) -> str:
         blob_client = self.client.get_blob_client(
-            container=self.container,
-            blob=blob_path,
-        )
-
+        container=self.container,
+        blob=blob_path,
+    )
         blob_client.upload_blob(
-            data,
-            overwrite=True,
-        )
-
+        data,
+        overwrite=True,
+    )
+        sas_token = generate_blob_sas(
+        account_name=settings.AZURE_STORAGE_ACCOUNT,
+        container_name=self.container,
+        blob_name=blob_path,
+        account_key=settings.AZURE_STORAGE_KEY,
+        permission=BlobSasPermissions(read=True),
+        expiry=datetime.utcnow() + timedelta(hours=24),
+    )
         return (
-            f"https://"
-            f"{settings.AZURE_STORAGE_ACCOUNT}"
-            f".blob.core.windows.net/"
-            f"{self.container}/"
-            f"{blob_path}"
-        )
+        f"https://"
+        f"{settings.AZURE_STORAGE_ACCOUNT}"
+        f".blob.core.windows.net/"
+        f"{self.container}/"
+        f"{blob_path}"
+        f"?{sas_token}"
+    )
 
     def delete_file(
         self,
@@ -110,6 +122,6 @@ class AzureBlobStorage(BaseStorage):
         files: dict[str, bytes] = {}
 
         for blob_name in self.list_files(folder):
-            files[blob_name] = self.download_file(blob_name)
+            files[Path(blob_name).name] = self.download_file(blob_name)
 
         return files

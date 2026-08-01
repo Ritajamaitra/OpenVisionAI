@@ -8,6 +8,8 @@ from app.api.routes.reports import router as report_router
 from app.api.routes.uploads import router as uploads_router
 from app.api.routes.annotations import router as annotation_router
 from app.api.routes.exports import router as export_router
+from app.api.routes.experiments import router as experiment_router
+from app.api.routes.training_run import router as training_run_router  
 from app.config.settings import settings
 from app.router import api_router
 
@@ -19,6 +21,8 @@ api_router.include_router(report_router)
 api_router.include_router(uploads_router)
 api_router.include_router(annotation_router)
 api_router.include_router(export_router)
+api_router.include_router(experiment_router)
+api_router.include_router(training_run_router)
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,

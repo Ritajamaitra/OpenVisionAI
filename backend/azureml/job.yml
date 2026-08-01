@@ -1,0 +1,42 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+
+type: command
+
+display_name: openvisionai-yolo-training
+
+experiment_name: openvisionai-training
+
+code: .
+
+command: >
+  python src/train.py
+  --data ${{inputs.data}}
+  --epochs ${{inputs.epochs}}
+  --batch-size ${{inputs.batch_size}}
+  --learning-rate ${{inputs.learning_rate}}
+  --imgsz ${{inputs.imgsz}}
+
+inputs:
+
+  data:
+    type: uri_folder
+
+  epochs:
+    type: integer
+    default: 50
+
+  batch_size:
+    type: integer
+    default: 16
+
+  learning_rate:
+    type: number
+    default: 0.001
+
+  imgsz:
+    type: integer
+    default: 640
+
+environment: azureml:openvisionai-yolo-env@latest
+
+compute: azureml:openvisionai-cpu

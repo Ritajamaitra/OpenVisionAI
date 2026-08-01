@@ -42,3 +42,9 @@ class Project(BaseEntity):
         "Report",
         back_populates="project",
     )
+
+    training_runs = relationship(
+    "TrainingRun",
+    back_populates="project",
+    cascade="all, delete-orphan",
+)

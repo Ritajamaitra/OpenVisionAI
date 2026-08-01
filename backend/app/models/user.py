@@ -3,7 +3,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseEntity
 from app.models.user_role import UserRole
-from app.models.project import Project
+
 class User(BaseEntity):
     __tablename__ = "users"
 
@@ -46,3 +46,8 @@ class User(BaseEntity):
         "Project",
         back_populates="owner",
     )
+
+    training_runs = relationship(
+    "TrainingRun",
+    back_populates="user",
+)
