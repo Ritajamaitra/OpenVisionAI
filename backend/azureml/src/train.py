@@ -9,13 +9,12 @@ Responsibilities
 4. Log parameters, metrics and artifacts to MLflow
 5. Return a clean training summary
 """
-
 import argparse
 import json
+import shutil
 import sys
+import time
 from pathlib import Path
-
-
 
 from datasets import (
     extract_dataset,
@@ -160,7 +159,7 @@ def main():
         # -------------------------------------------------
         # Train
         # -------------------------------------------------
-
+        start_time = time.time()
         training_result = train_model(
             dataset_yaml=yaml_file,
             model_name=args.model,
@@ -172,7 +171,9 @@ def main():
             device=args.device,
         )
 
-        
+        training_time = round(
+            time.time() - start_time,2,)
+    
         # -------------------------------------------------
         # Logs
         # -------------------------------------------------
@@ -181,6 +182,69 @@ def main():
         logger.info("Training Completed")
         logger.info("=" * 70)
 
+        # -------------------------------------------------
+        # Azure ML Output Contract
+        # -------------------------------------------------
+
+        outputs_dir = Path("outputs")
+        outputs_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+            )
+        models_dir = outputs_dir / "models"
+        models_dir.mkdir(exist_ok=True,)
+
+        best_model = Path(training_result["best_model"])
+        last_model = Path(training_result["last_model"])
+
+        if best_model.exists():
+            shutil.copy2(best_model,models_dir / "best.pt",)
+
+        if last_model.exists():
+            shutil.copy2(last_model,models_dir / "last.pt",)
+
+        metrics = training_result["metrics"]
+        metrics_json = {
+            "precision": float(
+                metrics.get(
+                    "metrics/precision(B)",
+                    metrics.get(
+                        "precision",0,
+            ),
+        )
+    ),
+
+            "recall": float(
+                metrics.get(
+                    "metrics/recall(B)",
+                    metrics.get(
+                "recall",0,
+            ),
+        )
+    ),
+
+            "map50": float(
+                metrics.get(
+                    "metrics/mAP50(B)",
+                    metrics.get(
+                "map50",0,
+            ),
+        )
+    ),
+
+            "map50_95": float(
+                metrics.get(
+                    "metrics/mAP50-95(B)",
+                    metrics.get(
+                "map50_95",
+                0,
+            ),
+        )
+    ),
+
+            "training_time": training_time,
+}
+
         logger.info(
             json.dumps(
                 training_result,
@@ -188,6 +252,37 @@ def main():
                 default=str,
             )
         )
+
+        with open(
+           outputs_dir / "metrics.json","w",) as f:
+           json.dump(
+             metrics_json,
+             f,
+             indent=4,)
+
+        summary = {
+
+    "status": "COMPLETED",
+
+    "model": args.model,
+
+    "epochs": args.epochs,
+
+    "imgsz": args.imgsz,
+
+    "batch": args.batch,
+
+    "dataset": str(yaml_file),
+
+    "best_model": str(
+        models_dir / "best.pt"
+    ),
+
+    "last_model": str(
+        models_dir / "last.pt"
+    ),
+}
+
 
         logger.info("Best Model : %s", training_result["best_model"])
         logger.info("Last Model : %s", training_result["last_model"])
