@@ -1,17 +1,19 @@
 """
 OpenVisionAI Azure ML Monitoring Client
 
-Responsible for monitoring Azure ML jobs.
-
-This module provides:
-
-- Job Status
-- Metrics
-- Outputs
-- Logs
-- Waiting for completion/
+Responsibilities
+----------------
+1. Monitor Azure ML jobs
+2. Retrieve job status
+3. Wait for job completion
+4. Download outputs
+5. Read metrics.json
+6. Read summary.json
 """
 
+import json
+import shutil
+import tempfile
 from pathlib import Path
 from time import sleep
 
@@ -41,7 +43,7 @@ class AzureMonitoringClient:
         self.client = get_azure_ml_client().client
 
     # ==========================================================
-    # Status
+    # Job Status
     # ==========================================================
 
     def get_status(
@@ -62,7 +64,7 @@ class AzureMonitoringClient:
             ) from ex
 
     # ==========================================================
-    # Wait Until Finished
+    # Wait for Completion
     # ==========================================================
 
     def wait_for_completion(
@@ -85,6 +87,75 @@ class AzureMonitoringClient:
             sleep(poll_interval)
 
     # ==========================================================
+# Read JSON Artifact
+# ==========================================================
+
+    def _read_json_artifact(
+            self,
+            job_name: str,
+            artifact_name: str,
+            ) -> dict:
+           
+           temp_dir = Path(
+               tempfile.mkdtemp(prefix="openvisionai_")
+               )
+           try:
+               
+               self.client.jobs.download(
+                   name=job_name,
+                  download_path=str(temp_dir),
+                  output_name="outputs",
+                  )
+               artifact = (
+                   temp_dir
+                   / "outputs"
+                   / artifact_name
+              )
+               if not artifact.exists():
+                   raise FileNotFoundError(
+                artifact_name
+            )
+               with open(
+            artifact,
+            "r",
+            encoding="utf-8",
+        ) as f:
+                   return json.load(f)
+
+           finally:
+               shutil.rmtree(
+            temp_dir,
+            ignore_errors=True,
+        )
+    # ==========================================================
+    # Download Logs
+    # ==========================================================
+
+    def download_logs(
+        self,
+        job_name: str,
+        destination: str | Path,
+    ) -> Path:
+
+        destination = Path(destination)
+
+        destination.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        try:
+            self.client.jobs.download(
+        name=job_name,
+        download_path=str(destination),
+        output_name="logs",
+    )
+        except HttpResponseError as ex:
+            raise JobMetricsException(
+        str(ex)
+    ) from ex
+
+    # ==========================================================
     # Metrics
     # ==========================================================
 
@@ -92,117 +163,36 @@ class AzureMonitoringClient:
         self,
         job_name: str,
     ) -> AzureJobMetrics:
-
         try:
-
-            job = self.client.jobs.get(job_name)
-
-            outputs = getattr(
-                job,
-                "properties",
-                None,
-            )
-
-            metrics = {}
-
-            if outputs is not None:
-
-                metrics = getattr(
-                    outputs,
-                    "properties",
-                    {},
-                )
-
+            metrics = self._read_json_artifact(
+        job_name,
+        "metrics.json",
+    )
             return AzureJobMetrics(
-
-                precision=float(
-                    metrics.get(
-                        "precision",
-                        0,
-                    )
-                ),
-
-                recall=float(
-                    metrics.get(
-                        "recall",
-                        0,
-                    )
-                ),
-
-                map50=float(
-                    metrics.get(
-                        "map50",
-                        0,
-                    )
-                ),
-
-                map50_95=float(
-                    metrics.get(
-                        "map50_95",
-                        0,
-                    )
-                ),
-
-                training_time=float(
-                    metrics.get(
-                        "training_time",
-                        0,
-                    )
-                ),
-            )
-
-        except HttpResponseError as ex:
-
+                precision=float(metrics.get("precision", 0)),
+                recall=float(metrics.get("recall", 0)),
+                map50=float(metrics.get("map50", 0)),
+                map50_95=float(metrics.get("map50_95", 0)),
+                training_time=float(metrics.get("training_time", 0)),
+    )
+        except (
+            HttpResponseError,
+            FileNotFoundError,
+            json.JSONDecodeError,
+            ) as ex:
             raise JobMetricsException(
-                str(ex)
-            ) from ex
+        str(ex)
+    ) from ex
 
     # ==========================================================
-    # Outputs
+    # Training Summary
     # ==========================================================
 
-    def get_outputs(
-        self,
-        job_name: str,
-        output_path: str,
-    ) -> Path:
-
-        destination = Path(output_path)
-
-        destination.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        self.client.jobs.download(
-            name=job_name,
-            download_path=str(destination),
-            output_name="outputs",
-        )
-
-        return destination
-
-    # ==========================================================
-    # Logs
-    # ==========================================================
-
-    def get_logs(
-        self,
-        job_name: str,
-        output_path: str,
-    ) -> Path:
-
-        destination = Path(output_path)
-
-        destination.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        self.client.jobs.download(
-            name=job_name,
-            download_path=str(destination),
-            output_name="logs",
-        )
-
-        return destination
+    def get_summary(
+    self,
+    job_name: str,
+) -> dict:
+        return self._read_json_artifact(
+        job_name,
+        "summary.json",
+    )

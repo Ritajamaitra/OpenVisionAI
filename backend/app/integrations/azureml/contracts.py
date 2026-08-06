@@ -171,11 +171,17 @@ class AzureDeployment:
 # Datastore
 # ==========================================================
 
+# ==========================================================
+# Datastore
+# ==========================================================
+
 @dataclass(slots=True)
 class AzureDatastore:
 
     name: str
 
-    account_name: str
+    datastore_type: str
 
-    container_name: str
+    account_name: str | None = None
+
+    path_name: str | None = None

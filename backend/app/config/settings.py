@@ -6,10 +6,21 @@ using Pydantic Settings.
 """
 
 from functools import lru_cache
+from pathlib import Path
 from urllib.parse import quote_plus
 
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    SettingsConfigDict,
+)
+
+# ==========================================================
+# Locate backend/.env
+# ==========================================================
+
+BASE_DIR = Path(__file__).resolve().parents[2]
+ENV_FILE = BASE_DIR / ".env"
 
 
 class Settings(BaseSettings):
@@ -45,26 +56,18 @@ class Settings(BaseSettings):
     # Database
     # ==========================================================
 
-    db_server: str = Field(
-        alias="OPENVISIONAI_DB_SERVER",
-    )
+    db_server: str = Field(alias="OPENVISIONAI_DB_SERVER")
 
     db_port: int = Field(
         default=1433,
         alias="OPENVISIONAI_DB_PORT",
     )
 
-    db_name: str = Field(
-        alias="OPENVISIONAI_DB_NAME",
-    )
+    db_name: str = Field(alias="OPENVISIONAI_DB_NAME")
 
-    db_username: str = Field(
-        alias="OPENVISIONAI_DB_USERNAME",
-    )
+    db_username: str = Field(alias="OPENVISIONAI_DB_USERNAME")
 
-    db_password: str = Field(
-        alias="OPENVISIONAI_DB_PASSWORD",
-    )
+    db_password: str = Field(alias="OPENVISIONAI_DB_PASSWORD")
 
     db_driver: str = Field(
         default="ODBC Driver 18 for SQL Server",
@@ -72,7 +75,7 @@ class Settings(BaseSettings):
     )
 
     # ==========================================================
-    # Azure Subscription
+    # Azure ML
     # ==========================================================
 
     azure_subscription_id: str = Field(
@@ -87,8 +90,16 @@ class Settings(BaseSettings):
         alias="OPENVISIONAI_AZURE_ML_WORKSPACE",
     )
 
+    compute_cluster: str = Field(
+        alias="OPENVISIONAI_COMPUTE_CLUSTER",
+    )
+
+    environment_name: str = Field(
+        alias="OPENVISIONAI_ENVIRONMENT_NAME",
+    )
+
     # ==========================================================
-    # Azure Storage
+    # Storage
     # ==========================================================
 
     storage_account: str = Field(
@@ -136,18 +147,6 @@ class Settings(BaseSettings):
     )
 
     # ==========================================================
-    # Azure ML
-    # ==========================================================
-
-    compute_cluster: str = Field(
-        alias="OPENVISIONAI_COMPUTE_CLUSTER",
-    )
-
-    environment_name: str = Field(
-        alias="OPENVISIONAI_ENVIRONMENT_NAME",
-    )
-
-    # ==========================================================
     # JWT
     # ==========================================================
 
@@ -165,10 +164,14 @@ class Settings(BaseSettings):
         alias="OPENVISIONAI_ACCESS_TOKEN_EXPIRE_MINUTES",
     )
 
+    # ==========================================================
+    # Azure Training
+    # ==========================================================
+
     azure_training_code_path: str = Field(
         default="backend/azureml",
         alias="OPENVISIONAI_AZURE_TRAINING_CODE_PATH",
-)
+    )
 
     # ==========================================================
     # SQLAlchemy URL
@@ -192,7 +195,7 @@ class Settings(BaseSettings):
         return f"mssql+pyodbc:///?odbc_connect={params}"
 
     # ==========================================================
-    # Blob Account URL
+    # Storage URL
     # ==========================================================
 
     @property
@@ -208,7 +211,7 @@ class Settings(BaseSettings):
     # ==========================================================
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -217,9 +220,6 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """
-    Cached settings instance.
-    """
     return Settings()
 
 
