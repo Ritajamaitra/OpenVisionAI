@@ -1,127 +1,156 @@
-from datetime import datetime, timedelta
+"""
+Azure Blob Storage Provider
+"""
 
-from azure.storage.blob import (
-    BlobServiceClient,
-    BlobSasPermissions,
-    generate_blob_sas,
-)
+from pathlib import Path
+
+from azure.storage.blob import BlobServiceClient
+
 from app.config.settings import settings
 from app.storage.base_storage import BaseStorage
-from pathlib import Path
 
 
 class AzureBlobStorage(BaseStorage):
-    """
-    Azure Blob Storage implementation.
-    """
 
     def __init__(self):
-        account_url = (
-            f"https://{settings.AZURE_STORAGE_ACCOUNT}.blob.core.windows.net"
+
+        self.client = BlobServiceClient.from_connection_string(
+            settings.storage_connection_string
         )
 
-        self.client = BlobServiceClient(
-            account_url=account_url,
-            credential=settings.AZURE_STORAGE_KEY,
-        )
+    # ---------------------------------------------------------
+    # Internal Helpers
+    # ---------------------------------------------------------
 
-        self.container = settings.AZURE_STORAGE_CONTAINER
-
-    def upload_file(
-    self,
-    blob_path: str,
-    data: bytes,
-) -> str:
-        blob_client = self.client.get_blob_client(
-        container=self.container,
-        blob=blob_path,
-    )
-        blob_client.upload_blob(
-        data,
-        overwrite=True,
-    )
-        sas_token = generate_blob_sas(
-        account_name=settings.AZURE_STORAGE_ACCOUNT,
-        container_name=self.container,
-        blob_name=blob_path,
-        account_key=settings.AZURE_STORAGE_KEY,
-        permission=BlobSasPermissions(read=True),
-        expiry=datetime.utcnow() + timedelta(hours=24),
-    )
-        return (
-        f"https://"
-        f"{settings.AZURE_STORAGE_ACCOUNT}"
-        f".blob.core.windows.net/"
-        f"{self.container}/"
-        f"{blob_path}"
-        f"?{sas_token}"
-    )
-
-    def delete_file(
+    def _upload(
         self,
+        container: str,
+        local_file: str,
         blob_path: str,
-    ) -> None:
+    ) -> str:
 
-        blob_client = self.client.get_blob_client(
-            container=self.container,
+        blob = self.client.get_blob_client(
+            container=container,
             blob=blob_path,
         )
 
-        blob_client.delete_blob()
+        with open(local_file, "rb") as f:
 
-    def file_exists(
+            blob.upload_blob(
+                f,
+                overwrite=True,
+            )
+
+        return blob.url
+
+    def _download(
         self,
+        container: str,
         blob_path: str,
-    ) -> bool:
+        local_file: str,
+    ):
 
-        blob_client = self.client.get_blob_client(
-            container=self.container,
+        blob = self.client.get_blob_client(
+            container=container,
             blob=blob_path,
         )
 
-        return blob_client.exists()
+        Path(local_file).parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
-    def download_file(
+        with open(local_file, "wb") as f:
+
+            data = blob.download_blob()
+
+            f.write(data.readall())
+
+    # ---------------------------------------------------------
+    # Dataset
+    # ---------------------------------------------------------
+
+    def upload_dataset(
+        self,
+        local_file: str,
+        blob_path: str,
+    ) -> str:
+
+        return self._upload(
+            settings.dataset_container,
+            local_file,
+            blob_path,
+        )
+
+    def download_dataset(
         self,
         blob_path: str,
-    ) -> bytes:
+        local_file: str,
+    ):
 
-        blob_client = self.client.get_blob_client(
-            container=self.container,
+        self._download(
+            settings.dataset_container,
+            blob_path,
+            local_file,
+        )
+
+    # ---------------------------------------------------------
+    # Model
+    # ---------------------------------------------------------
+
+    def upload_model(
+        self,
+        local_file: str,
+        blob_path: str,
+    ) -> str:
+
+        return self._upload(
+            settings.model_container,
+            local_file,
+            blob_path,
+        )
+
+    def download_model(
+        self,
+        blob_path: str,
+        local_file: str,
+    ):
+
+        self._download(
+            settings.model_container,
+            blob_path,
+            local_file,
+        )
+
+    # ---------------------------------------------------------
+    # Report
+    # ---------------------------------------------------------
+
+    def upload_report(
+        self,
+        local_file: str,
+        blob_path: str,
+    ) -> str:
+
+        return self._upload(
+            settings.report_container,
+            local_file,
+            blob_path,
+        )
+
+    # ---------------------------------------------------------
+    # Delete
+    # ---------------------------------------------------------
+
+    def delete_blob(
+        self,
+        container: str,
+        blob_path: str,
+    ):
+
+        blob = self.client.get_blob_client(
+            container=container,
             blob=blob_path,
         )
 
-        return blob_client.download_blob().readall()
-
-    def list_files(
-        self,
-        folder: str,
-    ) -> list[str]:
-
-        container_client = self.client.get_container_client(
-            self.container,
-        )
-
-        blobs = container_client.list_blobs(
-            name_starts_with=folder,
-        )
-
-        return [
-            blob.name
-            for blob in blobs
-        ]
-
-    def download_files(
-        self,
-        folder: str,
-    ) -> dict[str, bytes]:
-        """
-        Download every blob under a folder.
-        """
-
-        files: dict[str, bytes] = {}
-
-        for blob_name in self.list_files(folder):
-            files[Path(blob_name).name] = self.download_file(blob_name)
-
-        return files
+        blob.delete_blob()

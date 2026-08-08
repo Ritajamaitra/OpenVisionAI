@@ -4,7 +4,7 @@ from app.schemas.experiment import (
     ExperimentDetails,
     ExperimentSummary,
 )
-from app.services.azure.azure_ml_services import get_ml_client
+from app.integrations.azureml.azure_ml import azure_ml
 from app.services.experiment_services import (
     ExperimentNotFoundException,
     ExperimentService,
@@ -20,7 +20,7 @@ def get_experiment_service() -> ExperimentService:
     """
     Dependency that provides an ExperimentService instance.
     """
-    ml_client = get_ml_client()
+    ml_client = azure_ml.client
     return ExperimentService(ml_client)
 
 
