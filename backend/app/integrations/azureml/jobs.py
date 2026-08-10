@@ -102,7 +102,7 @@ class AzureJobsClient:
     ),
     inputs={
         "dataset": Input(
-            type=AssetTypes.URI_FILE,
+            type=AssetTypes.URI_FOLDER,
             path=request.dataset_uri,
         )
     },
