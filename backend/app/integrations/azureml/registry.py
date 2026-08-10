@@ -122,53 +122,40 @@ class AzureRegistryClient:
     # ==========================================================
 
     def _download_best_model(
-        self,
-        job_name: str,
-    ) -> tuple[Path, Path]:
-        """
-        Download outputs/models/best.pt from an Azure ML job.
-
-        Returns
-        -------
-        tuple[Path, Path]
-            (best_model_path, temporary_directory)
-        """
-
+    self,
+    job_name: str,
+) -> tuple[Path, Path]:
         temp_dir = Path(
-            tempfile.mkdtemp(
-                prefix="openvisionai_model_"
-            )
+        tempfile.mkdtemp(
+            prefix="openvisionai_model_"
         )
-
+    )
         try:
             self.client.jobs.download(
-                name=job_name,
-                download_path=str(temp_dir),
-                output_name="outputs",
-            )
-
-            best_model = (
-                temp_dir
-                / "outputs"
-                / "models"
-                / "best.pt"
-            )
-
-            if not best_model.exists():
+            name=job_name,
+            download_path=str(temp_dir),
+            all=True,
+        )
+            matches = list(
+            temp_dir.rglob("best.pt")
+        )
+            if not matches:
                 raise FileNotFoundError(
-                    "Azure ML job output "
-                    "'outputs/models/best.pt' was not found."
-                )
+                "Could not find 'best.pt' "
+                "inside Azure ML job artifacts."
+            )
+            for match in matches:
+                if "outputs" in match.parts:
+                    return match, temp_dir
 
-            return best_model, temp_dir
+            return matches[0], temp_dir
 
         except Exception:
             shutil.rmtree(
-                temp_dir,
-                ignore_errors=True,
-            )
+            temp_dir,
+            ignore_errors=True,
+        )
             raise
-
     # ==========================================================
     # Register Job Output
     # ==========================================================
