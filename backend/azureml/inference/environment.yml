@@ -1,0 +1,21 @@
+$schema: https://azuremlschemas.azureedge.net/latest/environment.schema.json
+
+name: openvisionai-yolo-inference
+version: "1"
+
+description: OpenVisionAI YOLO inference environment
+
+image: mcr.microsoft.com/azureml/minimal-ubuntu22.04-py39-cpu-inference:latest
+
+conda_file:
+  name: openvisionai-yolo-inference
+  channels:
+    - conda-forge
+  dependencies:
+    - python=3.9
+    - pip
+    - pip:
+        - ultralytics==8.3.32
+        - opencv-python-headless
+        - pillow
+        - numpy

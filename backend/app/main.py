@@ -10,6 +10,7 @@ from app.api.routes.annotations import router as annotation_router
 from app.api.routes.exports import router as export_router
 from app.api.routes.experiments import router as experiment_router
 from app.api.routes.training_run import router as training_run_router  
+from app.api.routes.deployments import router as deployment_router
 from app.config.settings import settings
 from app.router import api_router
 
@@ -23,6 +24,7 @@ api_router.include_router(annotation_router)
 api_router.include_router(export_router)
 api_router.include_router(experiment_router)
 api_router.include_router(training_run_router)
+api_router.include_router(deployment_router)
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
