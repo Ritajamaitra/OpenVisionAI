@@ -1,160 +1,231 @@
 """
-Dataset utilities for OpenVisionAI.
+OpenVisionAI YOLO Dataset Utilities
 
-Responsibilities:
-- Extract ZIP datasets
-- Locate dataset YAML
-- Validate dataset structure
-- Return dataset root
+The Azure ML training input is a URI_FOLDER containing an
+already-extracted YOLO dataset.
+
+Expected structure:
+
+dataset/
+├── dataset.yaml
+├── images/
+│   └── *.png / *.jpg / ...
+└── labels/
+    └── *.txt
 """
 
 from pathlib import Path
-from zipfile import ZipFile
-import logging
-import tempfile
+from typing import Tuple
 
-from utils import read_yaml
+import yaml
 
 
-SUPPORTED_YAML_FILES = (
-    "dataset.yaml",
-    "data.yaml",
-    "dataset.yml",
-    "data.yml",
-)
+# ==========================================================
+# Dataset Loading
+# ==========================================================
 
-
-def extract_dataset(zip_path: str | Path) -> Path:
+def extract_dataset(dataset_path: str | Path) -> Path:
     """
-    Extract a ZIP dataset into a temporary directory.
+    Return the mounted Azure ML dataset directory.
 
-    Parameters
-    ----------
-    zip_path : str | Path
+    The dataset is already extracted because the Azure ML
+    input is registered as AssetTypes.URI_FOLDER.
 
-    Returns
-    -------
-    Path
-        Extraction directory.
+    Kept under the existing function name so train.py does
+    not require a larger refactor.
     """
 
-    zip_path = Path(zip_path)
+    dataset_path = Path(dataset_path)
 
-    if not zip_path.exists():
-        raise FileNotFoundError(f"Dataset not found: {zip_path}")
+    if not dataset_path.exists():
+        raise FileNotFoundError(
+            f"Dataset path does not exist: {dataset_path}"
+        )
 
-    extract_dir = Path(tempfile.mkdtemp(prefix="openvisionai_dataset_"))
+    if not dataset_path.is_dir():
+        raise ValueError(
+            f"Expected a dataset directory, got: {dataset_path}"
+        )
 
-    with ZipFile(zip_path, "r") as zip_ref:
-        zip_ref.extractall(extract_dir)
-
-    return extract_dir
+    return dataset_path
 
 
-def find_data_yaml(dataset_root: str | Path) -> Path:
+# ==========================================================
+# YAML Discovery
+# ==========================================================
+
+def _find_yaml(dataset_dir: Path) -> Path:
     """
-    Locate dataset.yaml or data.yaml recursively.
-
-    Parameters
-    ----------
-    dataset_root : str | Path
-
-    Returns
-    -------
-    Path
+    Find the YOLO dataset configuration file.
     """
 
-    dataset_root = Path(dataset_root)
+    candidates = (
+        "dataset.yaml",
+        "data.yaml",
+        "dataset.yml",
+        "data.yml",
+    )
 
-    for yaml_name in SUPPORTED_YAML_FILES:
-        matches = list(dataset_root.rglob(yaml_name))
+    for name in candidates:
+        yaml_path = dataset_dir / name
 
-        if matches:
-            return matches[0]
+        if yaml_path.exists():
+            return yaml_path
 
     raise FileNotFoundError(
-        "No dataset YAML found. "
-        f"Expected one of {SUPPORTED_YAML_FILES}"
+        "No YOLO dataset YAML found. "
+        f"Expected one of: {', '.join(candidates)} "
+        f"inside {dataset_dir}"
     )
 
 
-def validate_dataset(dataset_root: str | Path) -> tuple[Path, dict]:
-    """
-    Validate dataset using the YAML.
+# ==========================================================
+# Dataset Validation
+# ==========================================================
 
-    Supports any valid Ultralytics dataset layout.
+def validate_dataset(
+    dataset_dir: str | Path,
+) -> Tuple[Path, dict]:
+    """
+    Validate the mounted YOLO dataset.
 
     Returns
     -------
     tuple
-        (
-            dataset_directory,
-            yaml_config
-        )
+        (dataset_root, parsed_yaml)
     """
 
-    dataset_root = Path(dataset_root)
+    dataset_dir = Path(dataset_dir)
 
-    yaml_path = find_data_yaml(dataset_root)
-
-    config = read_yaml(yaml_path)
-
-    dataset_dir = yaml_path.parent
-
-    required_keys = ["train", "val", "names"]
-
-    missing = [k for k in required_keys if k not in config]
-
-    if missing:
-        raise ValueError(
-            f"dataset.yaml missing required keys: {missing}"
+    if not dataset_dir.exists():
+        raise FileNotFoundError(
+            f"Dataset directory does not exist: {dataset_dir}"
         )
 
-    splits = {
-        "train": config["train"],
-        "val": config["val"],
-    }
+    if not dataset_dir.is_dir():
+        raise ValueError(
+            f"Dataset root must be a directory: {dataset_dir}"
+        )
 
-    for split_name, split_path in splits.items():
+    yaml_file = _find_yaml(dataset_dir)
 
-        resolved = (dataset_dir / split_path).resolve()
+    with yaml_file.open(
+        "r",
+        encoding="utf-8",
+    ) as file:
+        config = yaml.safe_load(file) or {}
 
-        if not resolved.exists():
-            raise ValueError(
-                f"{split_name} path does not exist:\n{resolved}"
-            )
+    images_dir = dataset_dir / "images"
+    labels_dir = dataset_dir / "labels"
+
+    if not images_dir.exists():
+        raise FileNotFoundError(
+            f"Images directory not found: {images_dir}"
+        )
+
+    if not labels_dir.exists():
+        raise FileNotFoundError(
+            f"Labels directory not found: {labels_dir}"
+        )
+
+    image_files = [
+        path
+        for path in images_dir.rglob("*")
+        if path.is_file()
+        and path.suffix.lower()
+        in {
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".bmp",
+            ".webp",
+        }
+    ]
+
+    label_files = [
+        path
+        for path in labels_dir.rglob("*.txt")
+        if path.is_file()
+    ]
+
+    if not image_files:
+        raise ValueError(
+            f"No image files found in {images_dir}"
+        )
+
+    if not label_files:
+        raise ValueError(
+            f"No YOLO label files found in {labels_dir}"
+        )
 
     return dataset_dir, config
 
 
+# ==========================================================
+# Dataset Information
+# ==========================================================
+
 def print_dataset_info(
-    dataset_dir: Path,
+    dataset_dir: str | Path,
     config: dict,
-    logger: logging.Logger,
-):
+    logger,
+) -> None:
     """
-    Print dataset information.
+    Log useful information about the YOLO dataset.
     """
 
-    logger.info("=" * 60)
+    dataset_dir = Path(dataset_dir)
+
+    logger.info("=" * 70)
     logger.info("Dataset Information")
-    logger.info("=" * 60)
+    logger.info("=" * 70)
 
-    logger.info("Dataset Root : %s", dataset_dir)
+    logger.info(
+        "Dataset Root : %s",
+        dataset_dir,
+    )
 
-    logger.info("Train Path   : %s", config["train"])
-    logger.info("Val Path     : %s", config["val"])
+    logger.info(
+        "Train Path   : %s",
+        config.get("train", "images"),
+    )
 
-    logger.info("Classes      : %s", len(config["names"]))
+    logger.info(
+        "Val Path     : %s",
+        config.get("val", config.get("train", "images")),
+    )
+
+    names = config.get("names", [])
+
+    if isinstance(names, dict):
+        names = [
+            names[key]
+            for key in sorted(names.keys())
+        ]
+
+    if isinstance(names, str):
+        names = [names]
+
+    nc = config.get(
+        "nc",
+        len(names),
+    )
+
+    logger.info(
+        "Classes      : %s",
+        nc,
+    )
 
     logger.info("Class Names")
 
-    if isinstance(config["names"], dict):
-        for idx, name in config["names"].items():
-            logger.info("%s -> %s", idx, name)
-
+    if names:
+        for index, name in enumerate(names):
+            logger.info(
+                "%s -> %s",
+                index,
+                name,
+            )
     else:
-        for idx, name in enumerate(config["names"]):
-            logger.info("%s -> %s", idx, name)
+        logger.info("No class names specified.")
 
-    logger.info("=" * 60)
+    logger.info("=" * 70)
