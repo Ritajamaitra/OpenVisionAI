@@ -47,6 +47,11 @@ class Settings(BaseSettings):
         alias="OPENVISIONAI_ENVIRONMENT",
     )
 
+    environment_version: str = Field(
+        default="1",
+        alias="OPENVISIONAI_ENVIRONMENT_VERSION",
+    )
+
     debug: bool = Field(
         default=False,
         alias="OPENVISIONAI_DEBUG",
@@ -130,6 +135,8 @@ class Settings(BaseSettings):
         alias="OPENVISIONAI_ARTIFACT_CONTAINER",
     )
 
+    
+
     # ==========================================================
     # Azure Identity
     # ==========================================================
@@ -172,6 +179,19 @@ class Settings(BaseSettings):
         default="backend/azureml",
         alias="OPENVISIONAI_AZURE_TRAINING_CODE_PATH",
     )
+
+    # ==========================================================
+    # Hugging Face
+    # ==========================================================
+
+    hf_token: str | None = Field(
+        default=None,
+        alias="OPENVISION_HF_TOKEN",
+    )
+
+    @property
+    def HF_TOKEN(self) -> str | None:
+        return self.hf_token
 
     # ==========================================================
     # SQLAlchemy URL

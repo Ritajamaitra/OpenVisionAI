@@ -24,8 +24,8 @@ class GroundingDINODetector(BaseDetector):
 
         self.model, self.processor = self.load_model()
 
-        if settings.HF_TOKEN:
-            login(token=settings.HF_TOKEN)
+        if settings.hf_token is not None:
+            login(token=settings.hf_token)
 
     def load_model(self):
 

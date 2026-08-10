@@ -24,8 +24,8 @@ api_router.include_router(export_router)
 api_router.include_router(experiment_router)
 api_router.include_router(training_run_router)
 app = FastAPI(
-    title=settings.APP_NAME,
-    version=settings.APP_VERSION,
+    title=settings.app_name,
+    version=settings.app_version,
 )
 
 app.include_router(api_router)
