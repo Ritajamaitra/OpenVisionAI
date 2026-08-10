@@ -5,14 +5,12 @@ Responsibilities
 ----------------
 1. Validate project ownership
 2. Validate dataset ownership and project relationship
-3. Resolve the Azure ML registered dataset
+3. Resolve the registered Azure ML data asset
 4. Build the Azure ML training request
 5. Submit the Azure ML training job
 6. Persist the Azure ML run in the database
 7. Synchronize Azure ML status and metrics
-8. Expose CRUD/lifecycle operations for training runs
-
-Azure-specific behavior is delegated to the Azure integration layer.
+8. Expose training-run lifecycle operations
 """
 
 from datetime import datetime
@@ -60,30 +58,9 @@ class TrainingSubmissionException(Exception):
 
 
 class TrainingService:
-    """
-    Orchestrates the complete OpenVisionAI training workflow.
+    """Orchestrates the complete OpenVisionAI training workflow."""
 
-    Flow
-    ----
-    Project
-        ↓
-    Dataset
-        ↓
-    Azure ML Data Asset
-        ↓
-    TrainingJobRequest
-        ↓
-    AzureJobsClient
-        ↓
-    Azure ML
-        ↓
-    TrainingRun database record
-    """
-
-    # ------------------------------------------------------
     # Azure ML configuration
-    # ------------------------------------------------------
-
     DEFAULT_ENVIRONMENT = "openvisionai-yolo-env"
     DEFAULT_ENVIRONMENT_VERSION = "1"
 
@@ -91,25 +68,19 @@ class TrainingService:
 
     DEFAULT_EXPERIMENT = "openvisionai-training"
 
-    # Registered Azure ML Data Asset
     DEFAULT_DATA_ASSET = "openvisionai-yolo-dataset"
     DEFAULT_DATA_ASSET_VERSION = "1"
-
-    # ------------------------------------------------------
-    # Initialization
-    # ------------------------------------------------------
 
     def __init__(self, db: Session):
         self.db = db
 
-        # Domain services
         self.project_service = ProjectService()
         self.dataset_service = DatasetService()
 
-        # Repository
-        self.training_repository = TrainingRunRepository(db)
+        self.training_repository = TrainingRunRepository(
+            db
+        )
 
-        # Azure integration
         self.azure_jobs = azure_ml.jobs
         self.azure_monitoring = azure_ml.monitoring
 
@@ -122,11 +93,6 @@ class TrainingService:
         project_id: int,
         current_user: User,
     ):
-        """
-        Validate that the project exists and belongs to
-        the current user.
-        """
-
         return self.project_service.get_project(
             db=self.db,
             project_id=project_id,
@@ -138,26 +104,17 @@ class TrainingService:
         dataset_id: int,
         current_user: User,
     ):
-        """
-        Validate that the dataset exists and belongs to
-        the current user.
-        """
-
         return self.dataset_service.get_dataset(
             db=self.db,
             dataset_id=dataset_id,
             current_user=current_user,
         )
 
+    @staticmethod
     def _validate_project_dataset(
-        self,
         project,
         dataset,
     ) -> None:
-        """
-        Ensure that the dataset belongs to the selected project.
-        """
-
         if dataset.project_id != project.id:
             raise PermissionError(
                 "Dataset does not belong to the specified project."
@@ -170,16 +127,27 @@ class TrainingService:
     @classmethod
     def _get_dataset_uri(cls) -> str:
         """
-        Return the Azure ML Data Asset reference used by training.
+        Return the registered Azure ML data asset reference.
 
-        Current registered asset:
-
+        Current asset:
             openvisionai-yolo-dataset:1
         """
-
         return (
             f"azureml:{cls.DEFAULT_DATA_ASSET}:"
             f"{cls.DEFAULT_DATA_ASSET_VERSION}"
+        )
+
+    @classmethod
+    def _get_environment_uri(cls) -> str:
+        """
+        Return the registered Azure ML environment reference.
+
+        Current environment:
+            openvisionai-yolo-env:1
+        """
+        return (
+            f"{cls.DEFAULT_ENVIRONMENT}:"
+            f"{cls.DEFAULT_ENVIRONMENT_VERSION}"
         )
 
     # ======================================================
@@ -190,15 +158,17 @@ class TrainingService:
         self,
         request: TrainingRunCreate,
     ) -> TrainingRun:
-
         if self.training_repository.exists(
             request.azure_run_id
         ):
             raise TrainingRunAlreadyExistsException(
-                f"Training run '{request.azure_run_id}' already exists."
+                f"Training run '{request.azure_run_id}' "
+                f"already exists."
             )
 
-        return self.training_repository.create(request)
+        return self.training_repository.create(
+            request
+        )
 
     # ======================================================
     # Status Normalization
@@ -208,11 +178,6 @@ class TrainingService:
     def _normalize_status(
         status: str | None,
     ) -> str:
-        """
-        Normalize Azure ML status values to the values used
-        by the TrainingRun repository.
-        """
-
         if not status:
             return "QUEUED"
 
@@ -237,19 +202,6 @@ class TrainingService:
         batch: int,
         current_user: User,
     ) -> TrainingRun:
-        """
-        Execute the complete training workflow.
-
-        Steps
-        -----
-        1. Validate project
-        2. Validate dataset
-        3. Validate project/dataset relationship
-        4. Resolve Azure ML Data Asset
-        5. Build TrainingJobRequest
-        6. Submit Azure ML job
-        7. Persist TrainingRun
-        """
 
         # --------------------------------------------------
         # 1. Validate project
@@ -279,10 +231,11 @@ class TrainingService:
         )
 
         # --------------------------------------------------
-        # 4. Resolve Azure ML Data Asset
+        # 4. Resolve Azure ML assets
         # --------------------------------------------------
 
         dataset_uri = self._get_dataset_uri()
+        environment_uri = self._get_environment_uri()
 
         # --------------------------------------------------
         # 5. Build Azure ML training request
@@ -307,30 +260,28 @@ class TrainingService:
 
             compute=self.DEFAULT_COMPUTE,
 
-            environment=(
-                f"{self.DEFAULT_ENVIRONMENT}:"
-                f"{self.DEFAULT_ENVIRONMENT_VERSION}"
-            ),
+            environment=environment_uri,
         )
 
         # --------------------------------------------------
-        # 6. Submit Azure ML training job
+        # 6. Submit Azure ML job
         # --------------------------------------------------
 
         try:
-
             job = self.azure_jobs.submit_training_job(
                 training_request
             )
 
         except Exception as exc:
-
             raise TrainingSubmissionException(
                 f"Azure ML training submission failed: {exc}"
             ) from exc
 
-        if job is None or not getattr(job, "name", None):
-
+        if job is None or not getattr(
+            job,
+            "name",
+            None,
+        ):
             raise TrainingSubmissionException(
                 "Azure ML returned no valid job identifier."
             )
@@ -341,21 +292,15 @@ class TrainingService:
 
         training_record = TrainingRunCreate(
             project_id=project.id,
-
             dataset_id=dataset.id,
-
             submitted_by=current_user.id,
-
             azure_run_id=job.name,
-
             experiment_name=getattr(
                 job,
                 "experiment_name",
                 self.DEFAULT_EXPERIMENT,
             ),
-
             model_name=model_name,
-
             status=self._normalize_status(
                 getattr(job, "status", None)
             ),
@@ -373,10 +318,6 @@ class TrainingService:
         self,
         azure_run_id: str,
     ) -> TrainingRun:
-        """
-        Synchronize one database TrainingRun with its
-        Azure ML job.
-        """
 
         training_run = self.get_training_run(
             azure_run_id
@@ -399,7 +340,6 @@ class TrainingService:
         # --------------------------------------------------
 
         if status == "RUNNING":
-
             update_data["started_at"] = (
                 training_run.started_at
                 or datetime.utcnow()
@@ -410,14 +350,12 @@ class TrainingService:
         # --------------------------------------------------
 
         elif status == "COMPLETED":
-
             update_data["completed_at"] = (
                 training_run.completed_at
                 or datetime.utcnow()
             )
 
             try:
-
                 metrics = self.azure_monitoring.get_metrics(
                     azure_run_id
                 )
@@ -429,25 +367,21 @@ class TrainingService:
                             "precision",
                             None,
                         ),
-
                         "recall": getattr(
                             metrics,
                             "recall",
                             None,
                         ),
-
                         "map50": getattr(
                             metrics,
                             "map50",
                             None,
                         ),
-
                         "map50_95": getattr(
                             metrics,
                             "map50_95",
                             None,
                         ),
-
                         "training_time": getattr(
                             metrics,
                             "training_time",
@@ -456,10 +390,15 @@ class TrainingService:
                     }
                 )
 
-            except Exception:
-                # Metrics may not be available immediately.
-                # Preserve the completed job status.
-                pass
+            except Exception as exc:
+                # The Azure job can be Completed before the
+                # output artifact is immediately downloadable.
+                # Keep the status and allow a later sync.
+                print(
+                    f"WARNING: Azure ML job '{azure_run_id}' "
+                    f"completed, but metrics could not be "
+                    f"retrieved yet: {exc}"
+                )
 
         # --------------------------------------------------
         # Failed / Cancelled
@@ -469,7 +408,6 @@ class TrainingService:
             "FAILED",
             "CANCELED",
         }:
-
             update_data["completed_at"] = (
                 training_run.completed_at
                 or datetime.utcnow()
@@ -502,7 +440,6 @@ class TrainingService:
         )
 
         if training_run is None:
-
             raise TrainingRunNotFoundException(
                 f"Training run '{azure_run_id}' not found."
             )
@@ -528,12 +465,8 @@ class TrainingService:
         project_id: int,
         current_user: User | None = None,
     ) -> List[TrainingRun]:
-        """
-        Return all training runs for a project.
-        """
 
         if current_user is not None:
-
             self._validate_project(
                 project_id=project_id,
                 current_user=current_user,
@@ -570,23 +503,17 @@ class TrainingService:
         self,
         azure_run_id: str,
     ) -> TrainingRun:
-        """
-        Cancel the Azure ML job and synchronize the
-        local TrainingRun record.
-        """
 
         self.get_training_run(
             azure_run_id
         )
 
         try:
-
             self.azure_jobs.cancel_job(
                 azure_run_id
             )
 
         except Exception as exc:
-
             raise TrainingSubmissionException(
                 f"Failed to cancel Azure ML training run "
                 f"'{azure_run_id}': {exc}"
@@ -594,7 +521,6 @@ class TrainingService:
 
         return self.update_training_run(
             azure_run_id=azure_run_id,
-
             update=TrainingRunUpdate(
                 status="CANCELED",
                 completed_at=datetime.utcnow(),
@@ -625,17 +551,14 @@ class TrainingService:
     def running_jobs(
         self,
     ) -> List[TrainingRun]:
-
         return self.training_repository.running()
 
     def completed_jobs(
         self,
     ) -> List[TrainingRun]:
-
         return self.training_repository.completed()
 
     def failed_jobs(
         self,
     ) -> List[TrainingRun]:
-
         return self.training_repository.failed()
