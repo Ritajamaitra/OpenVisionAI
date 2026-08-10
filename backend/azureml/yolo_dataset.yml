@@ -1,0 +1,9 @@
+$schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+
+name: openvisionai-yolo-dataset
+version: "1"
+type: uri_folder
+
+description: OpenVisionAI YOLO training dataset
+
+path: azureml://datastores/datasets/paths/project_1/dataset_1/yolo/
