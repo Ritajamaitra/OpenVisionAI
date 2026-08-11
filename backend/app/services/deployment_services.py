@@ -36,7 +36,7 @@ class DeploymentService:
     DEFAULT_DEPLOYMENT_NAME = "blue"
 
     DEFAULT_INSTANCE_TYPE = (
-        "Standard_DS3_v2"
+        "Standard_DS2_v2"
     )
 
     DEFAULT_INSTANCE_COUNT = 1
