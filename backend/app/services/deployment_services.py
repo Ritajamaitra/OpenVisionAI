@@ -50,7 +50,7 @@ class DeploymentService:
     )
 
     DEFAULT_SCORING_CODE = (
-        "backend/azureml/inference"
+        "azureml/inference"
     )
 
     DEFAULT_SCORING_SCRIPT = "score.py"
