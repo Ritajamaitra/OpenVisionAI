@@ -142,27 +142,32 @@ class DeploymentService:
         # 4. Create / get endpoint
         # --------------------------------------------------
 
+        # --------------------------------------------------
+# 4. Create / get endpoint
+# --------------------------------------------------
         try:
-
-            endpoint = (
-                self.azure_deployments
-                .create_endpoint(
-                    endpoint_name=endpoint_name,
-
-                    description=(
-                        "OpenVisionAI YOLO "
-                        "object detection endpoint."
-                    ),
-
-                    auth_mode="key",
-                )
+            try:
+                endpoint = (
+            self.azure_deployments
+            .get_endpoint(endpoint_name)
+        )
+            except Exception:
+                endpoint = (
+            self.azure_deployments
+            .create_endpoint(
+                endpoint_name=endpoint_name,
+                description=(
+                    "OpenVisionAI YOLO "
+                    "object detection endpoint."
+                ),
+                auth_mode="key",
             )
+        )
 
         except Exception as exc:
-
             raise DeploymentException(
-                f"Endpoint creation failed: {exc}"
-            ) from exc
+        f"Endpoint creation failed: {exc}"
+    ) from exc
 
         # --------------------------------------------------
         # 5. Build deployment request
