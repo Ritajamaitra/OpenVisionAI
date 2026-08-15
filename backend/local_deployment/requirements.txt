@@ -1,3 +1,6 @@
-ultralytics
+torch==2.5.1+cpu
+torchvision==0.20.1+cpu
+ultralytics==8.3.0
+opencv-python-headless
 pillow
-azureml-inference-server-http
+azureml-inference-server-http==1.5.1

@@ -1,3 +1,4 @@
+
 import base64
 import io
 import json
@@ -13,15 +14,31 @@ model = None
 def init():
     global model
 
-    model_path = os.environ.get(
-        "MODEL_PATH",
-        "/app/model/best.pt"
+    model_dir = os.environ.get(
+        "AZUREML_MODEL_DIR",
+        os.environ.get("MODEL_PATH", "/app/model")
     )
 
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(
-            f"Model not found: {model_path}"
-        )
+    if os.path.isfile(model_dir):
+        model_path = model_dir
+    else:
+        candidates = []
+
+        for root, _, files in os.walk(model_dir):
+            for filename in files:
+                if filename == "best.pt":
+                    candidates.append(
+                        os.path.join(root, filename)
+                    )
+
+        if not candidates:
+            raise FileNotFoundError(
+                f"best.pt was not found inside {model_dir}"
+            )
+
+        model_path = candidates[0]
+
+    print(f"Loading YOLO model from: {model_path}")
 
     model = YOLO(model_path)
 
@@ -50,9 +67,13 @@ def run(raw_data):
             io.BytesIO(image_bytes)
         ).convert("RGB")
 
+        confidence = float(
+            data.get("confidence", 0.25)
+        )
+
         results = model(
             image,
-            conf=float(data.get("confidence", 0.25))
+            conf=confidence
         )
 
         predictions = []
@@ -63,7 +84,7 @@ def run(raw_data):
 
                 xyxy = box.xyxy[0].tolist()
 
-                confidence = float(
+                confidence_value = float(
                     box.conf[0]
                 )
 
@@ -79,7 +100,7 @@ def run(raw_data):
 
                 predictions.append({
                     "label": class_name,
-                    "confidence": confidence,
+                    "confidence": confidence_value,
                     "bbox": [
                         x1,
                         y1,
