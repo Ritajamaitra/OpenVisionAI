@@ -147,8 +147,6 @@ class ModelService(BaseService[ModelRegistry]):
         if model_update.framework is not None:
             model.framework = model_update.framework
 
-        if model_update.version is not None:
-            model.version = model_update.version
 
         if model_update.mlflow_run_id is not None:
             model.mlflow_run_id = model_update.mlflow_run_id

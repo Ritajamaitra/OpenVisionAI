@@ -77,11 +77,6 @@ class ModelUpdate(BaseModel):
         max_length=100,
     )
 
-    version: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=50,
-    )
 
     mlflow_run_id: str | None = Field(
         default=None,
