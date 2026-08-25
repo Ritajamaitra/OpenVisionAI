@@ -6,6 +6,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
@@ -36,10 +37,6 @@ async def upload_image(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Upload an image to a dataset.
-    """
-
     try:
         return await upload_service.upload_image(
             db=db,
@@ -47,7 +44,6 @@ async def upload_image(
             file=file,
             current_user=current_user,
         )
-
     except PermissionError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -66,10 +62,6 @@ async def upload_annotation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Upload an annotation file.
-    """
-
     try:
         return await upload_service.upload_annotation(
             db=db,
@@ -77,12 +69,76 @@ async def upload_annotation(
             file=file,
             current_user=current_user,
         )
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        )
+
+
+@router.get(
+    "/datasets/{dataset_id}/images",
+    response_model=list[str],
+)
+def list_dataset_images(
+    dataset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return image filenames stored for a dataset."""
+    try:
+        return upload_service.list_dataset_images(
+            db=db,
+            dataset_id=dataset_id,
+            current_user=current_user,
+        )
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        )
+
+
+@router.get(
+    "/datasets/{dataset_id}/images/{image_name}",
+)
+def get_dataset_image(
+    dataset_id: int,
+    image_name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Stream one dataset image through the authenticated API."""
+    try:
+        image_bytes, content_type = upload_service.get_dataset_image(
+            db=db,
+            dataset_id=dataset_id,
+            image_name=image_name,
+            current_user=current_user,
+        )
+
+        return Response(
+            content=image_bytes,
+            media_type=content_type,
+            headers={"Cache-Control": "private, max-age=300"},
+        )
 
     except PermissionError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    except Exception as exc:
+        # Blob not found / storage failure.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Image '{image_name}' could not be retrieved.",
+        ) from exc
 
 
 @router.get(
@@ -94,17 +150,12 @@ def preview_dataset(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Preview dataset statistics.
-    """
-
     try:
         return upload_service.preview_dataset(
             db=db,
             dataset_id=dataset_id,
             current_user=current_user,
         )
-
     except PermissionError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

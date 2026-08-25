@@ -9,6 +9,37 @@ from app.ai.detectors.base_detector import BaseDetector
 from app.config.settings import settings
 from huggingface_hub import login
 
+def normalize_label(label: str) -> str:
+    """
+    Normalize Grounding DINO text labels.
+
+    Grounding DINO may sometimes return repeated tokens such as:
+        helmet helmet helmet
+        helmet helmet helmet jacket
+
+    This keeps the meaningful unique terms while preserving
+    multi-word concepts.
+    """
+
+    label = " ".join(str(label).strip().split())
+
+    if not label:
+        return ""
+
+    words = label.split()
+
+    normalized = []
+    seen = set()
+
+    for word in words:
+        key = word.lower()
+
+        if key not in seen:
+            normalized.append(word)
+            seen.add(key)
+
+    return " ".join(normalized)
+
 class GroundingDINODetector(BaseDetector):
     """
     Grounding DINO implementation.
@@ -108,7 +139,7 @@ class GroundingDINODetector(BaseDetector):
                         float(x2 - x1),
                         float(y2 - y1),
                     ],
-                    "label": str(label),
+                    "label": normalize_label(label),
                     "confidence": float(score),
                 }
             )

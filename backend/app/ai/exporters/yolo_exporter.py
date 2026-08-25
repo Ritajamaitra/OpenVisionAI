@@ -1,102 +1,122 @@
-from io import BytesIO
-
-from PIL import Image
+from collections import OrderedDict
 
 from app.models.annotation import Annotation
 
 
 class YOLOExporter:
     """
-    Export annotations in YOLO format.
+    Converts reviewed annotations into a YOLO training dataset.
 
-    Database stores:
-
-        bbox_x      = x_min
-        bbox_y      = y_min
-        bbox_width  = width
-        bbox_height = height
-
-    YOLO requires:
-
-        class_id
-        x_center
-        y_center
-        width
-        height
-
-    where all coordinates are normalized to [0, 1].
+    The exporter:
+    - groups annotations by image
+    - creates a deterministic class mapping
+    - generates YOLO .txt label files
+    - generates dataset.yaml
     """
 
     def build_labels(
         self,
         annotations: list[Annotation],
-        images: dict[str, bytes],
+        images=None,
     ) -> dict[str, bytes]:
 
         files: dict[str, bytes] = {}
 
+        # ---------------------------------------------------------
+        # 1. Keep only approved annotations
+        # ---------------------------------------------------------
+
+        approved = [
+            annotation
+            for annotation in annotations
+            if annotation.status.value == "APPROVED"
+        ]
+
+        if not approved:
+            raise ValueError(
+                "No approved annotations available for training."
+            )
+
+        # ---------------------------------------------------------
+        # 2. Build deterministic class mapping
+        # ---------------------------------------------------------
+
+        class_names = sorted(
+            {
+                annotation.label.strip()
+                for annotation in approved
+                if annotation.label
+                and annotation.label.strip()
+            }
+        )
+
+        if not class_names:
+            raise ValueError(
+                "No valid annotation classes found."
+            )
+
+        class_to_id = {
+            class_name: index
+            for index, class_name in enumerate(class_names)
+        }
+
+        # ---------------------------------------------------------
+        # 3. Group annotations by image
+        # ---------------------------------------------------------
+
         grouped: dict[str, list[Annotation]] = {}
 
-        for annotation in annotations:
+        for annotation in approved:
             grouped.setdefault(
                 annotation.image_name,
                 [],
             ).append(annotation)
 
+        # ---------------------------------------------------------
+        # 4. Generate YOLO label files
+        # ---------------------------------------------------------
+
         for image_name, rows in grouped.items():
-
-            if image_name not in images:
-                print(
-                    f"WARNING: Image '{image_name}' not found. "
-                    "Skipping label generation."
-                )
-                continue
-
-            image = Image.open(
-                BytesIO(images[image_name])
-            )
-
-            image_width, image_height = image.size
-
-            if image_width <= 0 or image_height <= 0:
-                print(
-                    f"WARNING: Invalid image size for {image_name}"
-                )
-                continue
 
             lines: list[str] = []
 
             for row in rows:
 
-                class_id = 0
+                label = (
+                    row.label.strip()
+                    if row.label
+                    else None
+                )
 
-                x_min = float(row.bbox_x)
-                y_min = float(row.bbox_y)
+                if not label:
+                    continue
+
+                class_id = class_to_id[label]
+
+                x_center = float(row.bbox_x)
+                y_center = float(row.bbox_y)
                 width = float(row.bbox_width)
                 height = float(row.bbox_height)
 
-                if width <= 0 or height <= 0:
-                    continue
+                # -------------------------------------------------
+                # Validate normalized coordinates
+                # -------------------------------------------------
 
-                x_center = x_min + (width / 2.0)
-                y_center = y_min + (height / 2.0)
+                values = [
+                    x_center,
+                    y_center,
+                    width,
+                    height,
+                ]
 
-                x_center /= image_width
-                y_center /= image_height
-                width /= image_width
-                height /= image_height
-
-                # Clamp values to YOLO limits
-                x_center = min(max(x_center, 0.0), 1.0)
-                y_center = min(max(y_center, 0.0), 1.0)
-                width = min(max(width, 0.0), 1.0)
-                height = min(max(height, 0.0), 1.0)
-
-                if (
-                    width <= 0
-                    or height <= 0
+                if not all(
+                    0.0 <= value <= 1.0
+                    for value in values
                 ):
-                    continue
+                    raise ValueError(
+                        f"Invalid YOLO bounding box for "
+                        f"{image_name}: {values}"
+                    )
 
                 lines.append(
                     f"{class_id} "
@@ -105,6 +125,9 @@ class YOLOExporter:
                     f"{width:.6f} "
                     f"{height:.6f}"
                 )
+
+            if not lines:
+                continue
 
             label_name = (
                 image_name.rsplit(".", 1)[0]
@@ -115,16 +138,30 @@ class YOLOExporter:
                 f"labels/{label_name}"
             ] = "\n".join(lines).encode("utf-8")
 
-        yaml = (
-            "train: images\n"
-            "val: images\n"
-            "nc: 1\n"
-            "names:\n"
-            "  0: object\n"
-        )
+        # ---------------------------------------------------------
+        # 5. Generate dataset.yaml
+        # ---------------------------------------------------------
 
-        files["dataset.yaml"] = yaml.encode(
-            "utf-8"
-        )
+        yaml_lines = [
+            "path: ./",
+            "train: images",
+            "val: images",
+            f"nc: {len(class_names)}",
+            "names:",
+        ]
+
+        for index, class_name in enumerate(class_names):
+            safe_name = class_name.replace(
+                '"',
+                "'",
+            )
+
+            yaml_lines.append(
+                f'  {index}: "{safe_name}"'
+            )
+
+        files["dataset.yaml"] = (
+            "\n".join(yaml_lines) + "\n"
+        ).encode("utf-8")
 
         return files

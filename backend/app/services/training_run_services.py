@@ -33,8 +33,10 @@ from app.schemas.training_run import (
     TrainingRunCreate,
     TrainingRunUpdate,
 )
+from app.schemas.export import ExportFormat
 
 from app.services.dataset_services import DatasetService
+from app.services.export_services import ExportService
 from app.services.project_services import ProjectService
 
 
@@ -76,9 +78,6 @@ class TrainingService:
 
     DEFAULT_EXPERIMENT = "openvisionai-training"
 
-    DEFAULT_DATA_ASSET = "openvisionai-yolo-dataset"
-    DEFAULT_DATA_ASSET_VERSION = "1"
-
     # Stable name in Azure ML Model Registry
     DEFAULT_REGISTERED_MODEL_NAME = "openvisionai-yolo"
 
@@ -91,6 +90,7 @@ class TrainingService:
 
         self.project_service = ProjectService()
         self.dataset_service = DatasetService()
+        self.export_service = ExportService()
 
         self.training_repository = TrainingRunRepository(db)
 
@@ -140,13 +140,6 @@ class TrainingService:
     # ======================================================
     # Azure ML Assets
     # ======================================================
-
-    @classmethod
-    def _get_dataset_uri(cls) -> str:
-        return (
-            f"azureml:{cls.DEFAULT_DATA_ASSET}:"
-            f"{cls.DEFAULT_DATA_ASSET_VERSION}"
-        )
 
     @classmethod
     def _get_environment_uri(cls) -> str:
@@ -238,10 +231,27 @@ class TrainingService:
         )
 
         # --------------------------------------------------
-        # 4. Azure ML assets
+        # 4. Export selected dataset to YOLO
         # --------------------------------------------------
 
-        dataset_uri = self._get_dataset_uri()
+        exported_dataset = self.export_service.export_dataset(
+            db=self.db,
+            dataset_id=dataset.id,
+            export_format=ExportFormat.YOLO,
+            current_user=current_user,
+        )
+
+        dataset_uri = getattr(
+            exported_dataset,
+            "download_url",
+            None,
+        )
+
+        if not dataset_uri:
+            raise TrainingSubmissionException(
+                "Dataset export did not return a valid download URL."
+            )
+
         environment_uri = self._get_environment_uri()
 
         # --------------------------------------------------

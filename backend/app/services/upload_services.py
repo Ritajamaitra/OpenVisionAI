@@ -19,22 +19,11 @@ from app.utils.file_validation import (
 
 
 class UploadService:
-    """
-    Handles dataset uploads.
-
-    Responsibilities:
-    - Validate uploads
-    - Upload files to Azure Blob Storage
-    - Update dataset statistics
-    """
+    """Handles dataset uploads and dataset image browsing."""
 
     def __init__(self):
         self.dataset_service = DatasetService()
         self.storage = AzureBlobStorage()
-
-    # -----------------------------------------------------
-    # Image Upload
-    # -----------------------------------------------------
 
     async def upload_image(
         self,
@@ -43,7 +32,6 @@ class UploadService:
         file: UploadFile,
         current_user: User,
     ) -> UploadImageResponse:
-
         validate_image_file(file)
 
         dataset = self.dataset_service.get_dataset(
@@ -53,7 +41,6 @@ class UploadService:
         )
 
         contents = await file.read()
-
         validate_file_size(len(contents))
 
         folder = (
@@ -68,11 +55,8 @@ class UploadService:
         storage_path = self.storage.upload_file(
             blob_path=blob_path,
             data=contents,
+            content_type=file.content_type,
         )
-
-        # -----------------------------
-        # Update Dataset Statistics
-        # -----------------------------
 
         dataset.total_images += 1
 
@@ -88,10 +72,6 @@ class UploadService:
             content_type=file.content_type,
         )
 
-    # -----------------------------------------------------
-    # Annotation Upload
-    # -----------------------------------------------------
-
     async def upload_annotation(
         self,
         db: Session,
@@ -99,7 +79,6 @@ class UploadService:
         file: UploadFile,
         current_user: User,
     ) -> UploadAnnotationResponse:
-
         validate_annotation_file(file)
 
         dataset = self.dataset_service.get_dataset(
@@ -109,11 +88,9 @@ class UploadService:
         )
 
         contents = await file.read()
-
         validate_file_size(len(contents))
 
         extension = Path(file.filename).suffix.lower()
-
         annotation_format = {
             ".json": "COCO",
             ".xml": "Pascal VOC",
@@ -132,14 +109,10 @@ class UploadService:
         storage_path = self.storage.upload_file(
             blob_path=blob_path,
             data=contents,
+            content_type=file.content_type,
         )
 
-        # -----------------------------
-        # Update Dataset Statistics
-        # -----------------------------
-
         dataset.annotated_images += 1
-
         dataset.total_annotations += 1
 
         self.dataset_service.update_statistics(
@@ -154,8 +127,57 @@ class UploadService:
         )
 
     # -----------------------------------------------------
-    # Dataset Preview
+    # 10.4 Dataset Images
     # -----------------------------------------------------
+
+    def list_dataset_images(
+        self,
+        db: Session,
+        dataset_id: int,
+        current_user: User,
+    ) -> list[str]:
+        dataset = self.dataset_service.get_dataset(
+            db=db,
+            dataset_id=dataset_id,
+            current_user=current_user,
+        )
+
+        image_prefix = (
+            f"datasets/"
+            f"project_{dataset.project_id}/"
+            f"dataset_{dataset.id}/"
+            f"images/"
+        )
+
+        return self.storage.list_dataset_images(image_prefix)
+
+    def get_dataset_image(
+        self,
+        db: Session,
+        dataset_id: int,
+        image_name: str,
+        current_user: User,
+    ) -> tuple[bytes, str]:
+        dataset = self.dataset_service.get_dataset(
+            db=db,
+            dataset_id=dataset_id,
+            current_user=current_user,
+        )
+
+        # Prevent path traversal and nested blob paths.
+        safe_name = Path(image_name).name
+        if safe_name != image_name or image_name in {"", ".", ".."}:
+            raise ValueError("Invalid image name.")
+
+        blob_path = (
+            f"datasets/"
+            f"project_{dataset.project_id}/"
+            f"dataset_{dataset.id}/"
+            f"images/"
+            f"{image_name}"
+        )
+
+        return self.storage.download_dataset_image(blob_path)
 
     def preview_dataset(
         self,
@@ -163,7 +185,6 @@ class UploadService:
         dataset_id: int,
         current_user: User,
     ) -> DatasetPreviewResponse:
-
         dataset = self.dataset_service.get_dataset(
             db=db,
             dataset_id=dataset_id,
