@@ -31,6 +31,7 @@ from app.schemas.training_run import (
     TrainingRunUpdate,
 )
 from app.services.training_run_services import (
+    ModelRegistrationException,
     TrainingRunAlreadyExistsException,
     TrainingRunNotFoundException,
     TrainingSubmissionException,
@@ -253,6 +254,43 @@ def get_training_job(
     except TrainingRunNotFoundException as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+# ==========================================================
+# Register Trained Model
+# ==========================================================
+
+
+@router.post(
+    "/jobs/{azure_run_id}/register-model",
+    response_model=TrainingRunResponse,
+    summary="Register the trained model in Azure ML",
+)
+def register_training_model(
+    azure_run_id: str,
+    service: TrainingService = Depends(
+        get_training_service
+    ),
+    current_user: User = Depends(
+        get_current_user
+    ),
+):
+    try:
+        return service.register_model(
+            azure_run_id=azure_run_id
+        )
+
+    except TrainingRunNotFoundException as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    except ModelRegistrationException as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
         ) from exc
 

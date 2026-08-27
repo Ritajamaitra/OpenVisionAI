@@ -1,9 +1,7 @@
 from sqlalchemy.orm import Session
 
-from app.models.model_registry import (
-    ModelRegistry,
-    ModelStatus,
-)
+from app.models.model_registry import ModelRegistry
+from app.models.model_status import ModelStatus
 from app.repositories.base_repository import BaseRepository
 
 
@@ -29,7 +27,9 @@ class ModelRepository(BaseRepository[ModelRegistry]):
             .filter(
                 ModelRegistry.dataset_id == dataset_id
             )
-            .order_by(ModelRegistry.created_at.desc())
+            .order_by(
+                ModelRegistry.created_at.desc()
+            )
             .all()
         )
 
@@ -44,9 +44,12 @@ class ModelRepository(BaseRepository[ModelRegistry]):
         return (
             db.query(ModelRegistry)
             .filter(
-                ModelRegistry.status == ModelStatus.ACTIVE
+                ModelRegistry.status
+                == ModelStatus.ACTIVE
             )
-            .order_by(ModelRegistry.created_at.desc())
+            .order_by(
+                ModelRegistry.created_at.desc()
+            )
             .all()
         )
 

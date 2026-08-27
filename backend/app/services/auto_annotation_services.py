@@ -2,7 +2,7 @@ import json
 import time
 
 from sqlalchemy.orm import Session
-
+from sqlalchemy import and_
 from app.ai.builders.coco_builder import COCOBuilder
 from app.ai.detectors.detector_factory import DetectorFactory
 from app.ai.io.imageloader import ImageLoader
@@ -46,14 +46,14 @@ class AutoAnnotationService:
         )
 
         blob_path = (
-    f"datasets/"
-    f"project_{dataset.project_id}/"
-    f"dataset_{dataset.id}/"
-    f"images/"
-    f"{image_name}"
-)
+            f"datasets/"
+            f"project_{dataset.project_id}/"
+            f"dataset_{dataset.id}/"
+            f"images/"
+            f"{image_name}"
+        )
 
-        image_bytes = self.storage.download_file(
+        image_bytes, _ = self.storage.download_dataset_image(
             blob_path
         )
 
@@ -70,29 +70,42 @@ class AutoAnnotationService:
             prompt=request.prompt,
             confidence=request.confidence,
         )
-        print("Detections:", detections)
-        print("Count:", len(detections))
+                # ------------------------------------------------------------
+        # Remove previous AUTO_GENERATED annotations for this image
+        # ------------------------------------------------------------
+        #
+        # Approved annotations are intentionally preserved.
+        # This makes Auto Annotate safe to run multiple times without
+        # continuously creating duplicate pending annotations.
+        #
+        db.query(Annotation).filter(
+            and_(
+                Annotation.dataset_id == dataset.id,
+                Annotation.image_name == image_name,
+                Annotation.status == AnnotationStatus.AUTO_GENERATED,
+            )
+        ).delete(synchronize_session=False)
+
+        db.flush()
         for detection in detections:
-             print(detection)
-             label = detection["label"].strip()
-             if not label:
-                 continue
+            label = detection["label"].strip()
+            if not label:
+                continue
 
-             x, y, width, height = detection["bbox"]
-             annotation = Annotation(
-                 dataset_id=dataset.id,
-                 image_name=image_name,
-                 label=detection["label"],
-                 confidence=detection["confidence"],
-                 bbox_x=x,
-                 bbox_y=y,
-                 bbox_width=width,
-                 bbox_height=height,
-                 status=AnnotationStatus.AUTO_GENERATED,
-          )  
-             print(annotation)
+            x, y, width, height = detection["bbox"]
+            annotation = Annotation(
+                dataset_id=dataset.id,
+                image_name=image_name,
+                label=label,
+                confidence=detection["confidence"],
+                bbox_x=x,
+                bbox_y=y,
+                bbox_width=width,
+                bbox_height=height,
+                status=AnnotationStatus.AUTO_GENERATED,
+            )
 
-             db.add(annotation)
+            db.add(annotation)
 
         db.flush()
 
@@ -115,12 +128,12 @@ class AutoAnnotationService:
         )
 
         annotation_path = (
-    f"datasets/"
-    f"project_{dataset.project_id}/"
-    f"dataset_{dataset.id}/"
-    f"annotations/"
-    f"{annotation_name}"
-)
+            f"datasets/"
+            f"project_{dataset.project_id}/"
+            f"dataset_{dataset.id}/"
+            f"annotations/"
+            f"{annotation_name}"
+        )
 
         annotation_bytes = json.dumps(
             coco,
@@ -135,12 +148,7 @@ class AutoAnnotationService:
         dataset.total_annotations += len(
             detections
         )
-        print(db.new)
-        print(type(annotation))
-        print(annotation.__table__)
-        print(annotation.__mapper__)
         db.commit()
-        print(db.bind.url)
         db.refresh(dataset)
 
         return AutoAnnotationResponse(

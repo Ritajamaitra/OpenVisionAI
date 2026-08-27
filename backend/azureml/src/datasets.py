@@ -26,14 +26,22 @@ import yaml
 
 def extract_dataset(dataset_path: str | Path) -> Path:
     """
-    Return the mounted Azure ML dataset directory.
+    Resolve an Azure ML dataset input.
 
-    The dataset is already extracted because the Azure ML
-    input is registered as AssetTypes.URI_FOLDER.
+    Supports:
+    1. Already-mounted YOLO dataset directory
+    2. ZIP dataset supplied as a file
 
-    Kept under the existing function name so train.py does
-    not require a larger refactor.
+    Returns
+    -------
+    Path
+        Directory containing dataset.yaml/data.yaml,
+        images/, and labels/.
     """
+
+    import shutil
+    import tempfile
+    import zipfile
 
     dataset_path = Path(dataset_path)
 
@@ -42,12 +50,113 @@ def extract_dataset(dataset_path: str | Path) -> Path:
             f"Dataset path does not exist: {dataset_path}"
         )
 
-    if not dataset_path.is_dir():
-        raise ValueError(
-            f"Expected a dataset directory, got: {dataset_path}"
+    # ------------------------------------------------------
+    # Case 1: Azure ML URI_FOLDER
+    # ------------------------------------------------------
+
+    if dataset_path.is_dir():
+        return dataset_path
+
+    # ------------------------------------------------------
+    # Case 2: ZIP file
+    # ------------------------------------------------------
+
+    if dataset_path.is_file():
+
+        if dataset_path.suffix.lower() != ".zip":
+            raise ValueError(
+                f"Unsupported dataset file: {dataset_path}. "
+                "Expected a .zip file."
+            )
+
+        extraction_root = (
+            Path(tempfile.gettempdir())
+            / "openvisionai_dataset"
         )
 
-    return dataset_path
+        # Remove previous extraction if it exists
+        if extraction_root.exists():
+            shutil.rmtree(
+                extraction_root
+            )
+
+        extraction_root.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        # --------------------------------------------------
+        # Extract ZIP
+        # --------------------------------------------------
+
+        with zipfile.ZipFile(
+            dataset_path,
+            "r",
+        ) as archive:
+
+            archive.extractall(
+                extraction_root
+            )
+
+        # --------------------------------------------------
+        # Find actual YOLO dataset root
+        # --------------------------------------------------
+
+        def is_yolo_root(path: Path) -> bool:
+
+            yaml_candidates = (
+                "dataset.yaml",
+                "data.yaml",
+                "dataset.yml",
+                "data.yml",
+            )
+
+            has_yaml = any(
+                (path / name).exists()
+                for name in yaml_candidates
+            )
+
+            has_images = (
+                path / "images"
+            ).is_dir()
+
+            has_labels = (
+                path / "labels"
+            ).is_dir()
+
+            return (
+                has_yaml
+                and has_images
+                and has_labels
+            )
+
+        # Direct root
+        if is_yolo_root(
+            extraction_root
+        ):
+            return extraction_root
+
+        # Search nested directories
+        for candidate in extraction_root.rglob("*"):
+
+            if candidate.is_dir() and is_yolo_root(
+                candidate
+            ):
+                return candidate
+
+        raise ValueError(
+            "ZIP was extracted successfully, but no valid "
+            "YOLO dataset root was found. Expected a directory "
+            "containing dataset.yaml/data.yaml, images/, and labels/."
+        )
+
+    # ------------------------------------------------------
+    # Unsupported input
+    # ------------------------------------------------------
+
+    raise ValueError(
+        f"Unsupported dataset input: {dataset_path}"
+    )
 
 
 # ==========================================================

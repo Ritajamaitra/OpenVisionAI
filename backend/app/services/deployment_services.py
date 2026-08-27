@@ -1,26 +1,11 @@
-"""
-OpenVisionAI Deployment Service
-
-Responsibilities
-----------------
-1. Validate model ownership
-2. Validate model status
-3. Create Azure ML managed endpoint
-4. Deploy registered model
-5. Persist endpoint on the related training run
-"""
-
+from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.integrations.azureml.azure_ml import azure_ml
-from app.integrations.azureml.contracts import (
-    DeploymentRequest,
-)
+from app.integrations.azureml.contracts import DeploymentRequest
 from app.models.user import User
 from app.services.model_services import ModelService
-from app.services.training_run_services import (
-    TrainingService,
-)
+from app.services.training_run_services import TrainingService
 
 
 class DeploymentException(Exception):
@@ -28,55 +13,21 @@ class DeploymentException(Exception):
 
 
 class DeploymentService:
-
-    DEFAULT_ENDPOINT_PREFIX = (
-        "openvisionai-yolo"
-    )
-
+    DEFAULT_ENDPOINT_PREFIX = "openvisionai-yolo"
     DEFAULT_DEPLOYMENT_NAME = "blue"
-
-    DEFAULT_INSTANCE_TYPE = (
-        "Standard_DS2_v2"
-    )
-
+    DEFAULT_INSTANCE_TYPE = "Standard_DS11_v2"
     DEFAULT_INSTANCE_COUNT = 1
 
-    DEFAULT_INFERENCE_ENVIRONMENT = (
-        "openvisionai-yolo-inference"
-    )
-
-    DEFAULT_INFERENCE_ENVIRONMENT_VERSION = (
-        "1"
-    )
-
-    DEFAULT_SCORING_CODE = (
-        "azureml/inference"
-    )
-
+    DEFAULT_INFERENCE_ENVIRONMENT = "openvisionai-yolo-inference"
+    DEFAULT_INFERENCE_ENVIRONMENT_VERSION = "1"
+    DEFAULT_SCORING_CODE = "azureml/inference"
     DEFAULT_SCORING_SCRIPT = "score.py"
 
-    def __init__(
-        self,
-        db: Session,
-    ):
-
+    def __init__(self, db: Session):
         self.db = db
-
-        self.model_service = (
-            ModelService()
-        )
-
-        self.training_service = (
-            TrainingService(db)
-        )
-
-        self.azure_deployments = (
-            azure_ml.deployments
-        )
-
-    # ======================================================
-    # Deploy
-    # ======================================================
+        self.model_service = ModelService()
+        self.training_service = TrainingService(db)
+        self.azure_deployments = azure_ml.deployments
 
     def deploy_model(
         self,
@@ -87,265 +38,217 @@ class DeploymentService:
         instance_type: str | None = None,
         instance_count: int | None = None,
     ):
-
-        # --------------------------------------------------
-        # 1. Validate model ownership
-        # --------------------------------------------------
-
         model = self.model_service.get_model(
             db=self.db,
             model_id=model_id,
             current_user=current_user,
         )
 
-        # --------------------------------------------------
-        # 2. Validate model
-        # --------------------------------------------------
-
-        if not model.name:
-
+        if not model.name or not model.version:
             raise DeploymentException(
-                "Registered model has no name."
+                "Only registered models with a name and version can be deployed."
             )
-
-        if not model.version:
-
-            raise DeploymentException(
-                "Registered model has no version."
-            )
-
-        # --------------------------------------------------
-        # 3. Resolve names
-        # --------------------------------------------------
 
         endpoint_name = (
-            endpoint_name
-            or self.DEFAULT_ENDPOINT_PREFIX
+            endpoint_name or self.DEFAULT_ENDPOINT_PREFIX
         )
-
         deployment_name = (
-            deployment_name
-            or self.DEFAULT_DEPLOYMENT_NAME
+            deployment_name or self.DEFAULT_DEPLOYMENT_NAME
         )
-
         instance_type = (
-            instance_type
-            or self.DEFAULT_INSTANCE_TYPE
+            instance_type or self.DEFAULT_INSTANCE_TYPE
         )
-
         instance_count = (
-            instance_count
-            or self.DEFAULT_INSTANCE_COUNT
+            instance_count or self.DEFAULT_INSTANCE_COUNT
         )
 
-        # --------------------------------------------------
-        # 4. Create / get endpoint
-        # --------------------------------------------------
-
-        # --------------------------------------------------
-# 4. Create / get endpoint
-# --------------------------------------------------
         try:
-            try:
-                endpoint = (
-            self.azure_deployments
-            .get_endpoint(endpoint_name)
-        )
-            except Exception:
-                endpoint = (
-            self.azure_deployments
-            .create_endpoint(
+            endpoint = self.azure_deployments.create_endpoint(
                 endpoint_name=endpoint_name,
                 description=(
-                    "OpenVisionAI YOLO "
-                    "object detection endpoint."
+                    "OpenVisionAI managed online endpoint."
                 ),
                 auth_mode="key",
             )
-        )
 
-        except Exception as exc:
-            raise DeploymentException(
-        f"Endpoint creation failed: {exc}"
-    ) from exc
-
-        # --------------------------------------------------
-        # 5. Build deployment request
-        # --------------------------------------------------
-
-        deployment_request = (
-            DeploymentRequest(
+            request = DeploymentRequest(
                 endpoint_name=endpoint.name,
-
                 deployment_name=deployment_name,
-
                 model_name=model.name,
-
-                model_version=str(
-                    model.version
-                ),
-
+                model_version=str(model.version),
                 instance_type=instance_type,
-
                 instance_count=instance_count,
             )
-        )
 
-        # --------------------------------------------------
-        # 6. Deploy registered model
-        # --------------------------------------------------
-
-        try:
-
-            deployment = (
-                self.azure_deployments
-                .deploy_model(
-                    request=deployment_request,
-
-                    environment_name=(
-                        self
-                        .DEFAULT_INFERENCE_ENVIRONMENT
-                    ),
-
-                    environment_version=(
-                        self
-                        .DEFAULT_INFERENCE_ENVIRONMENT_VERSION
-                    ),
-
-                    scoring_code_path=(
-                        self.DEFAULT_SCORING_CODE
-                    ),
-
-                    scoring_script=(
-                        self.DEFAULT_SCORING_SCRIPT
-                    ),
-                )
+            deployment = self.azure_deployments.deploy_model(
+                request=request,
+                environment_name=self.DEFAULT_INFERENCE_ENVIRONMENT,
+                environment_version=self.DEFAULT_INFERENCE_ENVIRONMENT_VERSION,
+                scoring_code_path=self.DEFAULT_SCORING_CODE,
+                scoring_script=self.DEFAULT_SCORING_SCRIPT,
             )
 
         except Exception as exc:
-
             raise DeploymentException(
                 f"Model deployment failed: {exc}"
             ) from exc
 
-        # --------------------------------------------------
-        # 7. Find related training run
-        # --------------------------------------------------
-
-        training_runs = (
-            self.training_service
-            .completed_jobs()
-        )
-
-        matching_run = None
-
-        for run in training_runs:
-
+        # Keep the existing TrainingRun endpoint reference in sync.
+        for run in self.training_service.completed_jobs():
             if (
-                run.registered_model_name
-                == model.name
-                and
-                str(
-                    run.registered_model_version
-                )
+                run.registered_model_name == model.name
+                and str(run.registered_model_version)
                 == str(model.version)
             ):
+                from app.schemas.training_run import TrainingRunUpdate
 
-                matching_run = run
-
+                self.training_service.update_training_run(
+                    azure_run_id=run.azure_run_id,
+                    update=TrainingRunUpdate(
+                        endpoint_name=deployment.endpoint_name
+                    ),
+                )
                 break
 
-        # --------------------------------------------------
-        # 8. Store endpoint name
-        # --------------------------------------------------
+        return self._deployment_response(
+            model=model,
+            endpoint=endpoint,
+            deployment=deployment,
+        )
 
-        if matching_run:
-
-            self.training_service.update_training_run(
-                azure_run_id=(
-                    matching_run.azure_run_id
-                ),
-
-                update=(
-                    __import__(
-                        "app.schemas.training_run",
-                        fromlist=[
-                            "TrainingRunUpdate"
-                        ],
-                    ).TrainingRunUpdate(
-                        endpoint_name=(
-                            deployment.endpoint_name
-                        )
-                    )
-                ),
+    def list_user_deployments(
+        self,
+        current_user: User,
+    ) -> list[dict]:
+        management_models = (
+            self.model_service.get_user_model_management(
+                db=self.db,
+                current_user=current_user,
             )
+        )
 
-        # --------------------------------------------------
-        # 9. Return deployment result
-        # --------------------------------------------------
-
-        return {
-            "model_id": model.id,
-
-            "model_name": model.name,
-
-            "model_version": str(
-                model.version
-            ),
-
-            "endpoint_name": (
-                deployment.endpoint_name
-            ),
-
-            "deployment_name": (
-                deployment.deployment_name
-            ),
-
-            "deployment_status": (
-                deployment.provisioning_state
-            ),
-
-            "scoring_uri": (
-                endpoint.scoring_uri
-            ),
+        owned_models = {
+            (
+                row["name"],
+                str(row["version"]),
+            ): row
+            for row in management_models
         }
 
-    # ======================================================
-    # Get Endpoint
-    # ======================================================
+        rows = []
+
+        try:
+            endpoints = self.azure_deployments.list_endpoints()
+        except Exception as exc:
+            raise DeploymentException(
+                f"Could not list Azure ML endpoints: {exc}"
+            ) from exc
+
+        for endpoint in endpoints:
+            try:
+                deployments = (
+                    self.azure_deployments.list_deployments(
+                        endpoint.name
+                    )
+                )
+            except Exception:
+                continue
+
+            for deployment in deployments:
+                key = (
+                    deployment.model_name,
+                    str(deployment.model_version),
+                )
+
+                model = owned_models.get(key)
+
+                if model is None:
+                    continue
+
+                rows.append(
+                    {
+                        "model_id": model["id"],
+                        "model_name": model["name"],
+                        "model_version": str(model["version"]),
+                        "dataset_name": model["dataset_name"],
+                        "endpoint_name": endpoint.name,
+                        "deployment_name": deployment.deployment_name,
+                        "deployment_status": (
+                            deployment.provisioning_state
+                        ),
+                        "endpoint_status": (
+                            endpoint.provisioning_state
+                        ),
+                        "endpoint_url": endpoint.scoring_uri,
+                        "instance_type": deployment.instance_type,
+                        "instance_count": deployment.instance_count,
+                        "azure_model_reference": (
+                            f"{deployment.model_name}:"
+                            f"{deployment.model_version}"
+                        ),
+                        "created_at": model["created_at"],
+                    }
+                )
+
+        return rows
 
     def get_endpoint(
         self,
         endpoint_name: str,
+        current_user: User,
     ):
-
-        return (
-            self.azure_deployments
-            .get_endpoint(
-                endpoint_name
-            )
+        rows = self.list_user_deployments(
+            current_user=current_user
         )
 
-    # ======================================================
-    # List Endpoints
-    # ======================================================
+        for row in rows:
+            if row["endpoint_name"] == endpoint_name:
+                return row
 
-    def list_endpoints(self):
-
-        return (
-            self.azure_deployments
-            .list_endpoints()
+        raise PermissionError(
+            "Endpoint not found or access denied."
         )
 
-    # ======================================================
-    # Delete Endpoint
-    # ======================================================
-
-    def delete_endpoint(
+    def stop_endpoint(
         self,
         endpoint_name: str,
+        current_user: User,
     ) -> None:
-
-        self.azure_deployments.delete_endpoint(
-            endpoint_name
+        # Ownership check before destructive Azure operation.
+        self.get_endpoint(
+            endpoint_name=endpoint_name,
+            current_user=current_user,
         )
+
+        try:
+            self.azure_deployments.delete_endpoint(
+                endpoint_name
+            )
+        except Exception as exc:
+            raise DeploymentException(
+                f"Could not stop endpoint '{endpoint_name}': {exc}"
+            ) from exc
+
+    @staticmethod
+    def _deployment_response(
+        model,
+        endpoint,
+        deployment,
+    ) -> dict:
+        return {
+            "model_id": model.id,
+            "model_name": model.name,
+            "model_version": str(model.version),
+            "dataset_name": None,
+            "endpoint_name": deployment.endpoint_name,
+            "deployment_name": deployment.deployment_name,
+            "deployment_status": deployment.provisioning_state,
+            "endpoint_status": endpoint.provisioning_state,
+            "endpoint_url": endpoint.scoring_uri,
+            "instance_type": deployment.instance_type,
+            "instance_count": deployment.instance_count,
+            "azure_model_reference": (
+                f"{deployment.model_name}:{deployment.model_version}"
+            ),
+            "created_at": getattr(model, "created_at", None),
+        }

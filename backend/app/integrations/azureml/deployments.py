@@ -1,15 +1,7 @@
 """
-OpenVisionAI Azure ML Deployment Client
+OpenVisionAI Azure ML Deployment Client.
 
-Responsibilities
-----------------
-1. Create managed online endpoints
-2. Deploy registered YOLO models
-3. Retrieve endpoints
-4. List endpoints
-5. Delete endpoints
-
-All Azure ML SDK-specific logic stays here.
+Azure SDK-specific logic for managed online endpoints and deployments.
 """
 
 from azure.ai.ml.entities import (
@@ -35,13 +27,8 @@ from app.integrations.azureml.exceptions import (
 
 
 class AzureDeploymentClient:
-
     def __init__(self):
         self.client = get_azure_ml_client().client
-
-    # ==========================================================
-    # Create Endpoint
-    # ==========================================================
 
     def create_endpoint(
         self,
@@ -49,9 +36,7 @@ class AzureDeploymentClient:
         description: str | None = None,
         auth_mode: str = "key",
     ) -> AzureEndpoint:
-
         try:
-
             endpoint = ManagedOnlineEndpoint(
                 name=endpoint_name,
                 description=description,
@@ -60,30 +45,20 @@ class AzureDeploymentClient:
 
             endpoint = (
                 self.client.online_endpoints
-                .begin_create_or_update(
-                    endpoint
-                )
+                .begin_create_or_update(endpoint)
                 .result()
             )
 
             return AzureEndpoint(
                 name=endpoint.name,
                 scoring_uri=endpoint.scoring_uri,
-                provisioning_state=(
-                    endpoint.provisioning_state
-                ),
+                provisioning_state=endpoint.provisioning_state,
             )
 
         except HttpResponseError as exc:
-
             raise DeploymentException(
-                f"Failed to create endpoint "
-                f"'{endpoint_name}': {exc}"
+                f"Failed to create endpoint '{endpoint_name}': {exc}"
             ) from exc
-
-    # ==========================================================
-    # Deploy Registered Model
-    # ==========================================================
 
     def deploy_model(
         self,
@@ -93,172 +68,161 @@ class AzureDeploymentClient:
         scoring_code_path: str,
         scoring_script: str = "score.py",
     ) -> AzureDeployment:
-
         try:
-
             model_reference = (
-                f"azureml:"
-                f"{request.model_name}:"
-                f"{request.model_version}"
+                f"azureml:{request.model_name}:{request.model_version}"
             )
 
             environment_reference = (
-                f"azureml:"
-                f"{environment_name}:"
-                f"{environment_version}"
+                f"azureml:{environment_name}:{environment_version}"
             )
 
             deployment = ManagedOnlineDeployment(
                 name=request.deployment_name,
-
                 endpoint_name=request.endpoint_name,
-
                 model=model_reference,
-
                 environment=environment_reference,
-
                 code_configuration=CodeConfiguration(
                     code=scoring_code_path,
                     scoring_script=scoring_script,
                 ),
-
                 instance_type=request.instance_type,
-
                 instance_count=request.instance_count,
             )
 
             deployment = (
                 self.client.online_deployments
-                .begin_create_or_update(
-                    deployment
-                )
+                .begin_create_or_update(deployment)
                 .result()
             )
 
             return AzureDeployment(
-                endpoint_name=(
-                    deployment.endpoint_name
-                ),
-
-                deployment_name=(
-                    deployment.name
-                ),
-
+                endpoint_name=deployment.endpoint_name,
+                deployment_name=deployment.name,
                 model_name=request.model_name,
-
-                model_version=(
-                    request.model_version
+                model_version=request.model_version,
+                provisioning_state=deployment.provisioning_state,
+                instance_type=getattr(
+                    deployment,
+                    "instance_type",
+                    request.instance_type,
                 ),
-
-                provisioning_state=(
-                    deployment.provisioning_state
-                ),
+                instance_count=getattr(
+                    deployment,
+                    "instance_count",
+                    request.instance_count,
+            ),
             )
 
         except HttpResponseError as exc:
-
             raise DeploymentException(
                 f"Failed to deploy "
-                f"'{request.model_name}:"
-                f"{request.model_version}': {exc}"
+                f"'{request.model_name}:{request.model_version}': {exc}"
             ) from exc
-
-    # ==========================================================
-    # Get Endpoint
-    # ==========================================================
 
     def get_endpoint(
         self,
         endpoint_name: str,
     ) -> AzureEndpoint:
-
         try:
-
-            endpoint = (
-                self.client.online_endpoints.get(
-                    endpoint_name
-                )
+            endpoint = self.client.online_endpoints.get(
+                endpoint_name
             )
 
             return AzureEndpoint(
                 name=endpoint.name,
-
-                scoring_uri=(
-                    endpoint.scoring_uri
-                ),
-
-                provisioning_state=(
-                    endpoint.provisioning_state
-                ),
+                scoring_uri=endpoint.scoring_uri,
+                provisioning_state=endpoint.provisioning_state,
             )
 
         except ResourceNotFoundError as exc:
-
             raise EndpointNotFoundException(
-                f"Endpoint '{endpoint_name}' "
-                f"not found."
+                f"Endpoint '{endpoint_name}' not found."
             ) from exc
 
-    # ==========================================================
-    # List Endpoints
-    # ==========================================================
-
-    def list_endpoints(
-        self,
-    ) -> list[AzureEndpoint]:
-
+    def list_endpoints(self) -> list[AzureEndpoint]:
         endpoints = []
 
-        for endpoint in (
-            self.client.online_endpoints.list()
-        ):
-
+        for endpoint in self.client.online_endpoints.list():
             endpoints.append(
                 AzureEndpoint(
                     name=endpoint.name,
-
-                    scoring_uri=(
-                        endpoint.scoring_uri
-                    ),
-
-                    provisioning_state=(
-                        endpoint.provisioning_state
-                    ),
+                    scoring_uri=endpoint.scoring_uri,
+                    provisioning_state=endpoint.provisioning_state,
                 )
             )
 
         return endpoints
 
-    # ==========================================================
-    # Delete Endpoint
-    # ==========================================================
+    def list_deployments(
+        self,
+        endpoint_name: str,
+    ) -> list[AzureDeployment]:
+        """
+        Return all managed deployments for an endpoint.
+
+        This is used by the OpenVisionAI Deployment Management UI to
+        display the deployed model, version, runtime status and compute.
+        """
+        deployments = []
+
+        for deployment in self.client.online_deployments.list(
+            endpoint_name=endpoint_name
+        ):
+            model = getattr(deployment, "model", None)
+            model_name = ""
+            model_version = ""
+
+            if model:
+                model_reference = str(model)
+                if model_reference.startswith("azureml:"):
+                    model_reference = model_reference[len("azureml:"):]
+
+                parts = model_reference.rsplit(":", 1)
+                if len(parts) == 2:
+                    model_name, model_version = parts
+
+            deployments.append(
+                AzureDeployment(
+                    endpoint_name=deployment.endpoint_name,
+                    deployment_name=deployment.name,
+                    model_name=model_name,
+                    model_version=model_version,
+                    provisioning_state=getattr(
+                        deployment,
+                        "provisioning_state",
+                        "Unknown",
+                    ),
+                    instance_type=getattr(
+                        deployment,
+                        "instance_type",
+                        None,
+                    ),
+                    instance_count=getattr(
+                        deployment,
+                        "instance_count",
+                        None,
+                    ),
+                )
+            )
+
+        return deployments
 
     def delete_endpoint(
         self,
         endpoint_name: str,
     ) -> None:
-
         try:
-
             (
                 self.client
                 .online_endpoints
-                .begin_delete(
-                    endpoint_name
-                )
+                .begin_delete(endpoint_name)
                 .result()
             )
-
         except HttpResponseError as exc:
-
             raise DeploymentException(
-                f"Failed to delete endpoint "
-                f"'{endpoint_name}': {exc}"
+                f"Failed to stop endpoint '{endpoint_name}': {exc}"
             ) from exc
-
-    # ==========================================================
-    # Invoke Endpoint
-    # ==========================================================
 
     def invoke_endpoint(
         self,
@@ -266,21 +230,13 @@ class AzureDeploymentClient:
         deployment_name: str,
         request_file: str,
     ):
-
         try:
-
-            return (
-                self.client
-                .online_endpoints
-                .invoke(
-                    endpoint_name=endpoint_name,
-                    deployment_name=deployment_name,
-                    request_file=request_file,
-                )
+            return self.client.online_endpoints.invoke(
+                endpoint_name=endpoint_name,
+                deployment_name=deployment_name,
+                request_file=request_file,
             )
-
         except HttpResponseError as exc:
-
             raise DeploymentException(
                 f"Endpoint invocation failed: {exc}"
             ) from exc

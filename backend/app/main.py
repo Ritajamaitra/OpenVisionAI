@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.auth import router as auth_router
 from app.api.routes.project import router as project_router
@@ -9,11 +10,32 @@ from app.api.routes.uploads import router as uploads_router
 from app.api.routes.annotations import router as annotation_router
 from app.api.routes.exports import router as export_router
 from app.api.routes.experiments import router as experiment_router
-from app.api.routes.training_run import router as training_run_router  
+from app.api.routes.training_run import router as training_run_router
 from app.api.routes.deployments import router as deployment_router
-from app.api.routes.inference import router as inference_router  # Import the inference router
+from app.api.routes.inference import router as inference_router
+from app.api.routes.inference_history import router as inference_history_router
+from app.api.routes.dashboard import router as dashboard_router
 from app.config.settings import settings
 from app.router import api_router
+
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 api_router.include_router(auth_router)
 api_router.include_router(project_router)
@@ -26,10 +48,10 @@ api_router.include_router(export_router)
 api_router.include_router(experiment_router)
 api_router.include_router(training_run_router)
 api_router.include_router(deployment_router)
-api_router.include_router(inference_router)  # Include the inference router
-app = FastAPI(
-    title=settings.app_name,
-    version=settings.app_version,
-)
+api_router.include_router(inference_router)
+api_router.include_router(inference_history_router)
+api_router.include_router(dashboard_router)
+
+
 
 app.include_router(api_router)
