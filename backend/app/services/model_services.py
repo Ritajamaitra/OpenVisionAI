@@ -1,9 +1,7 @@
 from sqlalchemy.orm import Session
 
-from app.models.model_registry import (
-    ModelRegistry,
-    ModelStatus,
-)
+from app.models.model_registry import ModelRegistry
+from app.models.model_status import ModelStatus
 from app.models.user import User
 from app.repositories.model_repository import ModelRepository
 from app.schemas.model import (
@@ -117,6 +115,86 @@ class ModelService(BaseService[ModelRegistry]):
             db=db,
             dataset_id=dataset.id,
         )
+
+    def get_user_model_management(
+        self,
+        db: Session,
+        current_user: User,
+    ) -> list[dict]:
+        """
+        Build the read-only Model Management view.
+
+        Metrics are read from metrics_json populated by the completed
+        Azure ML training/registration workflow. No metric input is
+        accepted by this method.
+        """
+        projects = (
+            self.dataset_service.project_service.get_user_projects(
+                db=db,
+                current_user=current_user,
+            )
+        )
+
+        rows: list[dict] = []
+
+        for project in projects:
+            datasets = (
+                self.dataset_service.get_project_datasets(
+                    db=db,
+                    project_id=project.id,
+                    current_user=current_user,
+                )
+            )
+
+            for dataset in datasets:
+                models = self.repository.find_by_dataset(
+                    db=db,
+                    dataset_id=dataset.id,
+                )
+
+                for model in models:
+                    metrics = model.metrics_json or {}
+
+                    rows.append(
+                        {
+                            "id": model.id,
+                            "name": model.name,
+                            "version": model.version,
+                            "dataset_id": model.dataset_id,
+                            "dataset_name": dataset.name,
+                            "training_run_id": metrics.get(
+                                "azure_run_id"
+                            ),
+                            "precision": metrics.get(
+                                "precision"
+                            ),
+                            "recall": metrics.get(
+                                "recall"
+                            ),
+                            "map50": metrics.get(
+                                "map50"
+                            ),
+                            "map50_95": metrics.get(
+                                "map50_95"
+                            ),
+                            "training_time": metrics.get(
+                                "training_time"
+                            ),
+                            "azure_model_reference": (
+                                f"{model.name}:{model.version}"
+                            ),
+                            "artifact_uri": model.artifact_uri,
+                            "status": model.status,
+                            "created_at": model.created_at,
+                        }
+                    )
+
+        rows.sort(
+            key=lambda row: row["created_at"],
+            reverse=True,
+        )
+
+        return rows
 
     def update_model(
         self,

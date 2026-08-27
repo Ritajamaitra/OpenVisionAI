@@ -11,6 +11,9 @@ export interface TrainingRunSummary {
   recall?: number | null;
   map50?: number | null;
   map50_95?: number | null;
+
+  training_time?: number | null;
+  started_at?: string | null;
 }
 
 export interface TrainingRun {

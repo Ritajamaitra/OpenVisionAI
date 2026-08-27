@@ -8,6 +8,7 @@ from app.schemas.model import (
     ModelCreate,
     ModelResponse,
     ModelUpdate,
+    ModelManagementResponse,
 )
 from app.services.model_services import ModelService
 
@@ -71,6 +72,34 @@ def get_dataset_models(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         )
+
+
+@router.get(
+    "/models/management",
+    response_model=list[ModelManagementResponse],
+    summary="List automatically registered models for Model Management",
+)
+def get_model_management(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    List automatically registered models with training metrics.
+
+    Metrics are populated by the Azure ML training and
+    model-registration workflow. No manual metric input.
+    """
+    try:
+        return model_service.get_user_model_management(
+            db=db,
+            current_user=current_user,
+        )
+
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get(

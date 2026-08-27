@@ -10,6 +10,19 @@ export interface LoginResponse {
   token_type: string;
 }
 
+export interface RegisterRequest {
+  username: string;
+  email: string;
+  full_name: string;
+  password: string;
+}
+
+export interface ResetCaptchaResponse {
+  message: string;
+  captcha: string;
+  expires_in_seconds: number;
+}
+
 export const login = async (
   credentials: LoginRequest
 ): Promise<LoginResponse> => {
@@ -29,4 +42,42 @@ export const login = async (
   );
 
   return response.data;
+};
+
+export const register = async (
+  request: RegisterRequest
+): Promise<void> => {
+  await apiClient.post("/auth/register", request);
+};
+
+export const generateResetCaptcha = async (
+  email: string
+): Promise<ResetCaptchaResponse> => {
+  const response = await apiClient.post<ResetCaptchaResponse>(
+    "/auth/forgot-password/captcha",
+    null,
+    {
+      params: { email },
+    }
+  );
+
+  return response.data;
+};
+
+export const resetPassword = async (
+  email: string,
+  captcha: string,
+  newPassword: string
+): Promise<void> => {
+  await apiClient.post(
+    "/auth/forgot-password/reset",
+    null,
+    {
+      params: {
+        email,
+        captcha,
+        new_password: newPassword,
+      },
+    }
+  );
 };

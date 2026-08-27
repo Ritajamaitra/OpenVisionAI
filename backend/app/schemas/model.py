@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.model_registry import ModelStatus
+from app.models.model_status import ModelStatus
 
 
 class ModelCreate(BaseModel):
@@ -11,41 +11,13 @@ class ModelCreate(BaseModel):
     Request schema for creating a model registry entry.
     """
 
-    name: str = Field(
-        min_length=3,
-        max_length=255,
-    )
-
-    description: str | None = Field(
-        default=None,
-        max_length=1000,
-    )
-
-    model_type: str = Field(
-        min_length=2,
-        max_length=100,
-    )
-
-    framework: str = Field(
-        min_length=2,
-        max_length=100,
-    )
-
-    version: str = Field(
-        min_length=1,
-        max_length=50,
-    )
-
-    mlflow_run_id: str | None = Field(
-        default=None,
-        max_length=255,
-    )
-
-    artifact_uri: str = Field(
-        min_length=1,
-        max_length=1024,
-    )
-
+    name: str = Field(min_length=3, max_length=255)
+    description: str | None = Field(default=None, max_length=1000)
+    model_type: str = Field(min_length=2, max_length=100)
+    framework: str = Field(min_length=2, max_length=100)
+    version: str = Field(min_length=1, max_length=50)
+    mlflow_run_id: str | None = Field(default=None, max_length=255)
+    artifact_uri: str = Field(min_length=1, max_length=1024)
     metrics_json: dict[str, Any] | None = None
 
 
@@ -55,40 +27,26 @@ class ModelUpdate(BaseModel):
     """
 
     name: str | None = Field(
-        default=None,
-        min_length=3,
-        max_length=255,
+        default=None, min_length=3, max_length=255
     )
-
     description: str | None = Field(
-        default=None,
-        max_length=1000,
+        default=None, max_length=1000
     )
-
     model_type: str | None = Field(
-        default=None,
-        min_length=2,
-        max_length=100,
+        default=None, min_length=2, max_length=100
     )
-
     framework: str | None = Field(
-        default=None,
-        min_length=2,
-        max_length=100,
+        default=None, min_length=2, max_length=100
     )
-
-
+    version: str | None = Field(
+        default=None, min_length=1, max_length=50
+    )
     mlflow_run_id: str | None = Field(
-        default=None,
-        max_length=255,
+        default=None, max_length=255
     )
-
     artifact_uri: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=1024,
+        default=None, min_length=1, max_length=1024
     )
-
     metrics_json: dict[str, Any] | None = None
 
 
@@ -98,31 +56,44 @@ class ModelResponse(BaseModel):
     """
 
     id: int
-
     name: str
-
     description: str | None
-
     dataset_id: int
-
     model_type: str
-
     framework: str
-
     version: str
-
     mlflow_run_id: str | None
-
     artifact_uri: str
-
     metrics_json: dict[str, Any] | None
-
     status: ModelStatus
-
     created_at: datetime
-
     updated_at: datetime
 
-    model_config = ConfigDict(
-        from_attributes=True,
-    )
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ModelManagementResponse(BaseModel):
+    """
+    Read-only model-management view.
+
+    All evaluation metrics are populated by the training/model-registration
+    pipeline. The Model Management endpoint accepts no metric input.
+    """
+
+    id: int
+    name: str
+    version: str
+    dataset_id: int
+    dataset_name: str
+    training_run_id: str | None
+    precision: float | None
+    recall: float | None
+    map50: float | None
+    map50_95: float | None
+    training_time: float | None
+    azure_model_reference: str
+    artifact_uri: str | None
+    status: ModelStatus
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

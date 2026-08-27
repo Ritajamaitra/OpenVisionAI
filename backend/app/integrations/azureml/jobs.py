@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 from azure.ai.ml import Input, command
-from azure.ai.ml.constants import AssetTypes
+from azure.ai.ml.constants import AssetTypes, InputOutputModes
 from azure.core.exceptions import (
     HttpResponseError,
     ResourceNotFoundError,
@@ -102,8 +102,9 @@ class AzureJobsClient:
     ),
     inputs={
         "dataset": Input(
-            type=AssetTypes.URI_FOLDER,
+            type=AssetTypes.URI_FILE,
             path=request.dataset_uri,
+            mode=InputOutputModes.DOWNLOAD,
         )
     },
     environment=request.environment,
@@ -116,7 +117,18 @@ class AzureJobsClient:
                 aml_job
             )
 
-            return self._to_contract(created_job)
+            print("=" * 70)
+            print(f"CREATED AZURE JOB: {created_job.name}")
+            print(f"STATUS: {getattr(created_job, 'status', None)}")
+            print("=" * 70)
+
+            verified_job = self.client.jobs.get(created_job.name)
+
+            print(
+                f"VERIFIED AZURE JOB: {verified_job.name}"
+            )
+
+            return self._to_contract(verified_job)
 
         except HttpResponseError as ex:
             raise JobSubmissionException(str(ex)) from ex

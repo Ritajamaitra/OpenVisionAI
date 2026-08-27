@@ -1,3 +1,6 @@
+
+
+
 """
 OpenVisionAI Training Orchestration Service
 
@@ -9,7 +12,7 @@ Responsibilities
 4. Submit Azure ML training jobs
 5. Persist TrainingRun
 6. Synchronize Azure ML status and metrics
-7. Automatically register completed model
+7. Register completed models independently
 8. Persist model registry metadata
 """
 
@@ -21,7 +24,6 @@ from sqlalchemy.orm import Session
 
 from app.integrations.azureml.azure_ml import azure_ml
 from app.integrations.azureml.contracts import TrainingJobRequest
-from app.integrations.azureml.registry import AzureRegistryClient
 
 from app.models.training_run import TrainingRun
 from app.models.user import User
@@ -96,9 +98,7 @@ class TrainingService:
 
         self.azure_jobs = azure_ml.jobs
         self.azure_monitoring = azure_ml.monitoring
-
-        # Azure ML Model Registry
-        self.azure_registry = AzureRegistryClient()
+        self.azure_registry = azure_ml.registry
 
     # ======================================================
     # Validation
@@ -241,16 +241,27 @@ class TrainingService:
             current_user=current_user,
         )
 
-        dataset_uri = getattr(
-            exported_dataset,
-            "download_url",
-            None,
+        # --------------------------------------------------
+        # 4b. Build Azure ML datastore URI
+        # --------------------------------------------------
+
+        dataset_blob_path = (
+            f"datasets/"
+            f"project_{dataset.project_id}/"
+            f"dataset_{dataset.id}/"
+            f"exports/"
+            f"{ExportFormat.YOLO.value}.zip"
         )
 
-        if not dataset_uri:
-            raise TrainingSubmissionException(
-                "Dataset export did not return a valid download URL."
+        try:
+            dataset_uri = azure_ml.datastores.build_uri(
+                relative_path=dataset_blob_path,
+                datastore_name="datasets",
             )
+        except Exception as exc:
+            raise TrainingSubmissionException(
+                f"Failed to build Azure ML dataset URI: {exc}"
+            ) from exc
 
         environment_uri = self._get_environment_uri()
 
@@ -347,13 +358,11 @@ class TrainingService:
         training_run: TrainingRun,
         metrics,
     ) -> tuple[str, str]:
-
         azure_run_id = training_run.azure_run_id
 
         # --------------------------------------------------
         # Prevent duplicate registration
         # --------------------------------------------------
-
         if (
             training_run.registered_model_name
             and training_run.registered_model_version
@@ -363,14 +372,24 @@ class TrainingService:
                 training_run.registered_model_version,
             )
 
+        registered_name = self.DEFAULT_REGISTERED_MODEL_NAME
+
+        print(
+            "\n================ MODEL REGISTRATION ================"
+        )
+        print(
+            "REGISTERING MODEL:",
+            {
+                "azure_run_id": azure_run_id,
+                "dataset_id": training_run.dataset_id,
+                "registered_name": registered_name,
+            },
+        )
+
         # --------------------------------------------------
         # Azure ML registration
         # --------------------------------------------------
-
-        registered_name = self.DEFAULT_REGISTERED_MODEL_NAME
-
         try:
-
             registered_model = (
                 self.azure_registry.register_job_output(
                     job_name=azure_run_id,
@@ -382,23 +401,38 @@ class TrainingService:
                     ),
                 )
             )
-
         except Exception as exc:
+            print(
+                "AZURE MODEL REGISTRATION FAILED:",
+                repr(exc),
+            )
 
             raise ModelRegistrationException(
                 "Automatic Azure ML model registration "
                 f"failed for job '{azure_run_id}': {exc}"
             ) from exc
 
+        if registered_model is None:
+            raise ModelRegistrationException(
+                "Azure ML returned no registered model."
+            )
+
         model_name = registered_model.name
         model_version = str(
             registered_model.version
         )
 
+        print(
+            "AZURE MODEL REGISTRATION SUCCESS:",
+            {
+                "name": model_name,
+                "version": model_version,
+            },
+        )
+
         # --------------------------------------------------
         # Build metrics payload
         # --------------------------------------------------
-
         metrics_json = {
             "precision": getattr(
                 metrics,
@@ -430,25 +464,34 @@ class TrainingService:
 
         # --------------------------------------------------
         # Artifact provenance
+        #
+        # Azure's register_job_output() already resolved
+        # the job output. Keep the job URI as provenance.
         # --------------------------------------------------
-
         artifact_uri = (
             f"azureml://jobs/{azure_run_id}"
             "/outputs/models/best.pt"
         )
 
+        print(
+            "CREATING DB MODEL REGISTRY RECORD:",
+            {
+                "name": model_name,
+                "version": model_version,
+                "dataset_id": training_run.dataset_id,
+                "artifact_uri": artifact_uri,
+            },
+        )
+
         # --------------------------------------------------
         # Check whether DB registry entry exists
         # --------------------------------------------------
-
         existing = self.db.execute(
             select(ModelRegistry).where(
                 ModelRegistry.dataset_id
                 == training_run.dataset_id,
-
                 ModelRegistry.name
                 == model_name,
-
                 ModelRegistry.version
                 == model_version,
             )
@@ -481,17 +524,101 @@ class TrainingService:
 
             self.db.add(registry_record)
 
+            print(
+                "DB MODEL RECORD CREATED:",
+                {
+                    "dataset_id": training_run.dataset_id,
+                    "name": model_name,
+                    "version": model_version,
+                },
+            )
+
         else:
 
             existing.artifact_uri = artifact_uri
             existing.metrics_json = metrics_json
 
-        # Make the DB object visible to the current transaction.
+            print(
+                "DB MODEL RECORD UPDATED:",
+                {
+                    "id": existing.id,
+                    "dataset_id": existing.dataset_id,
+                    "name": existing.name,
+                    "version": existing.version,
+                },
+            )
+
+        # Force INSERT/UPDATE now so any DB error is visible here.
         self.db.flush()
+
+        print(
+            "DB MODEL REGISTRY FLUSH SUCCESS:",
+            {
+                "dataset_id": training_run.dataset_id,
+                "name": model_name,
+                "version": model_version,
+            },
+        )
+
+        print(
+            "====================================================\n"
+        )
 
         return (
             model_name,
             model_version,
+        )
+
+    # ======================================================
+    # Register Completed Model
+    # ======================================================
+
+    def register_model(
+        self,
+        azure_run_id: str,
+    ) -> TrainingRun:
+        """Register a successfully completed training run's model.
+
+        Registration is deliberately independent from training status.
+        A registration failure never changes a COMPLETED training run.
+        """
+        training_run = self.get_training_run(azure_run_id)
+
+        if training_run.status != "COMPLETED":
+            raise ModelRegistrationException(
+                "Model can only be registered after training is COMPLETED."
+            )
+
+        if (
+            training_run.registered_model_name
+            and training_run.registered_model_version
+        ):
+            return training_run
+
+        try:
+            metrics = self.azure_monitoring.get_metrics(azure_run_id)
+        except Exception:
+            metrics = None
+
+        try:
+            registered_name, registered_version = (
+                self._register_completed_model(
+                    training_run=training_run,
+                    metrics=metrics,
+                )
+            )
+        except Exception as exc:
+            raise ModelRegistrationException(
+                f"Model registration failed for training run "
+                f"'{azure_run_id}': {exc}"
+            ) from exc
+
+        return self.update_training_run(
+            azure_run_id=azure_run_id,
+            update=TrainingRunUpdate(
+                registered_model_name=registered_name,
+                registered_model_version=registered_version,
+            ),
         )
 
     # ======================================================
@@ -591,52 +718,18 @@ class TrainingService:
                     }
                 )
 
-                # ------------------------------------------
-                # Automatic model registration
-                # ------------------------------------------
-
-                (
-                    registered_name,
-                    registered_version,
-                ) = self._register_completed_model(
-                    training_run=training_run,
-                    metrics=metrics,
-                )
-
-                update_data.update(
-                    {
-                        "registered_model_name":
-                            registered_name,
-
-                        "registered_model_version":
-                            registered_version,
-                    }
-                )
-
-            except ModelRegistrationException as exc:
-
-                # Training succeeded, but registration
-                # failed. Keep COMPLETED status and allow
-                # another /sync to retry registration.
-
-                print(
-                    f"WARNING: Azure ML job "
-                    f"'{azure_run_id}' completed, "
-                    f"but model registration failed: "
-                    f"{exc}"
-                )
-
             except Exception as exc:
-
-                # Metrics/artifacts may temporarily be
-                # unavailable immediately after completion.
+                import traceback
 
                 print(
-                    f"WARNING: Azure ML job "
-                    f"'{azure_run_id}' completed, "
-                    f"but synchronization failed: "
-                    f"{exc}"
+                    f"\nERROR: Synchronization failed "
+                    f"for Azure ML job '{azure_run_id}'"
                 )
+                print("ERROR TYPE:", type(exc).__name__)
+                print("ERROR:", repr(exc))
+                traceback.print_exc()
+
+                raise
 
         # --------------------------------------------------
         # 4. Failed / Cancelled

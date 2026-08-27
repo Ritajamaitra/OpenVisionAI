@@ -73,6 +73,117 @@ const ACTIVE_STATUSES = [
   "SUBMITTED",
 ];
 
+type TrainingConfig = {
+  epochs: number;
+  imgsz: number;
+  batch: number;
+  modelName: string;
+};
+
+const TRAINING_CONFIG_STORAGE_KEY =
+  "openvisionai.training.config.v1";
+
+const MODEL_COST_MULTIPLIER: Record<string, number> = {
+  "yolov8n.pt": 1,
+  "yolov8s.pt": 1.35,
+  "yolov8m.pt": 2,
+};
+
+function readTrainingConfigs(): Record<string, TrainingConfig> {
+  try {
+    return JSON.parse(
+      localStorage.getItem(TRAINING_CONFIG_STORAGE_KEY) ?? "{}"
+    );
+  } catch {
+    return {};
+  }
+}
+
+function saveTrainingConfig(
+  azureRunId: string,
+  config: TrainingConfig
+) {
+  try {
+    const configs = readTrainingConfigs();
+    configs[azureRunId] = config;
+    localStorage.setItem(
+      TRAINING_CONFIG_STORAGE_KEY,
+      JSON.stringify(configs)
+    );
+  } catch {
+    // Training must still work if browser storage is unavailable.
+  }
+}
+
+function formatDuration(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return "—";
+  }
+
+  const rounded = Math.floor(seconds);
+
+  if (rounded < 60) {
+    return `${rounded}s`;
+  }
+
+  const minutes = Math.floor(rounded / 60);
+  const remainingSeconds = rounded % 60;
+
+  if (minutes < 60) {
+    return `${minutes}m ${remainingSeconds}s`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
+
+function estimateTrainingSeconds(
+  config: TrainingConfig,
+  referenceRuns: TrainingRunSummary[],
+  configs: Record<string, TrainingConfig>
+) {
+  const samples = referenceRuns
+    .filter(
+      (run) =>
+        normaliseStatus(run.status) === "COMPLETED" &&
+        typeof run.training_time === "number" &&
+        run.training_time > 0 &&
+        configs[run.azure_run_id]
+    )
+    .map((run) => {
+      const reference = configs[run.azure_run_id];
+      const modelMultiplier =
+        MODEL_COST_MULTIPLIER[reference.modelName] ?? 1.5;
+
+      const work =
+        reference.epochs *
+        Math.pow(reference.imgsz / 640, 2) *
+        (4 / Math.max(reference.batch, 1)) *
+        modelMultiplier;
+
+      return (run.training_time ?? 0) / Math.max(work, 1);
+    })
+    .filter((value) => Number.isFinite(value));
+
+  if (samples.length === 0) {
+    return null;
+  }
+
+  const sorted = [...samples].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+
+  const modelMultiplier =
+    MODEL_COST_MULTIPLIER[config.modelName] ?? 1.5;
+
+  const work =
+    config.epochs *
+    Math.pow(config.imgsz / 640, 2) *
+    (4 / Math.max(config.batch, 1)) *
+    modelMultiplier;
+
+  return median * work;
+}
+
 
 function normaliseStatus(status?: string) {
   return (
@@ -323,6 +434,13 @@ export default function Training() {
     setShowNewTraining,
   ] = useState(false);
 
+  const [now, setNow] = useState(() => Date.now());
+
+  const [trainingConfigs, setTrainingConfigs] =
+    useState<Record<string, TrainingConfig>>(() =>
+      readTrainingConfigs()
+    );
+
 
   // ------------------------------------------------------------
   // New training form
@@ -543,6 +661,19 @@ export default function Training() {
 
 
   // ------------------------------------------------------------
+  // Live elapsed-time clock
+  // ------------------------------------------------------------
+
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setNow(Date.now()),
+      1000
+    );
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // ------------------------------------------------------------
   // Sync active jobs
   // ------------------------------------------------------------
 
@@ -734,6 +865,22 @@ export default function Training() {
           batch:
             Number(batchSize),
         });
+
+      const submittedConfig: TrainingConfig = {
+        modelName,
+        epochs: Number(epochs),
+        imgsz: Number(imageSize),
+        batch: Number(batchSize),
+      };
+
+      saveTrainingConfig(
+        result.azure_run_id,
+        submittedConfig
+      );
+
+      setTrainingConfigs(
+        readTrainingConfigs()
+      );
 
       setShowNewTraining(
         false
@@ -1305,6 +1452,14 @@ export default function Training() {
                   </th>
 
                   <th>
+                    Time
+                  </th>
+
+                  <th>
+                    Estimate
+                  </th>
+
+                  <th>
                     Precision
                   </th>
 
@@ -1394,6 +1549,135 @@ export default function Training() {
                             run.status
                           }
                         />
+                      </td>
+
+                      <td>
+                        <div className="training-time-cell">
+                          <Clock3 size={14} />
+                          <span>
+                            {(() => {
+                              const status =
+                                normaliseStatus(
+                                  run.status
+                                );
+
+                              if (
+                                status === "COMPLETED"
+                              ) {
+                                return formatTrainingTime(
+                                  run.training_time
+                                );
+                              }
+
+                              if (
+                                ACTIVE_STATUSES.includes(
+                                  status
+                                )
+                              ) {
+                                if (!run.started_at) {
+                                  return "Starting…";
+                                }
+
+                                const started =
+                                  new Date(
+                                    run.started_at
+                                  ).getTime();
+
+                                return formatDuration(
+                                  Math.max(
+                                    0,
+                                    (now - started) /
+                                      1000
+                                  )
+                                );
+                              }
+
+                              return "—";
+                            })()}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td>
+                        {(() => {
+                          const status =
+                            normaliseStatus(
+                              run.status
+                            );
+                          const config =
+                            trainingConfigs[
+                              run.azure_run_id
+                            ];
+
+                          if (
+                            status === "COMPLETED"
+                          ) {
+                            return formatTrainingTime(
+                              run.training_time
+                            );
+                          }
+
+                          if (
+                            !ACTIVE_STATUSES.includes(
+                              status
+                            )
+                          ) {
+                            return "—";
+                          }
+
+                          if (!config) {
+                            return (
+                              <span className="training-estimate-text">
+                                Learning…
+                              </span>
+                            );
+                          }
+
+                          const estimate =
+                            estimateTrainingSeconds(
+                              config,
+                              trainingRuns,
+                              trainingConfigs
+                            );
+
+                          if (estimate == null) {
+                            return (
+                              <span className="training-estimate-text">
+                                Learning…
+                              </span>
+                            );
+                          }
+
+                          const started =
+                            run.started_at
+                              ? new Date(
+                                  run.started_at
+                                ).getTime()
+                              : now;
+
+                          const elapsed =
+                            Math.max(
+                              0,
+                              (now - started) /
+                                1000
+                            );
+
+                          const remaining =
+                            Math.max(
+                              0,
+                              estimate - elapsed
+                            );
+
+                          return (
+                            <span className="training-estimate-text">
+                              {remaining > 0
+                                ? `~${formatDuration(
+                                    remaining
+                                  )} left`
+                                : "Finishing…"}
+                            </span>
+                          );
+                        })()}
                       </td>
 
 
@@ -1782,6 +2066,42 @@ export default function Training() {
               </div>
 
 
+              {/* Estimated time */}
+
+              <div className="training-info-box">
+                <Clock3
+                  size={17}
+                />
+
+                <div>
+                  <strong>
+                    Estimated training time
+                  </strong>
+
+                  <span>
+                    {(() => {
+                      const estimate =
+                        estimateTrainingSeconds(
+                          {
+                            modelName,
+                            epochs: Number(epochs),
+                            imgsz: Number(imageSize),
+                            batch: Number(batchSize),
+                          },
+                          trainingRuns,
+                          trainingConfigs
+                        );
+
+                      return estimate != null
+                        ? `~${formatDuration(
+                            estimate
+                          )} based on completed runs.`
+                        : "Complete one run to enable data-driven estimates.";
+                    })()}
+                  </span>
+                </div>
+              </div>
+
               {/* Info */}
 
               <div className="training-info-box">
@@ -1960,9 +2280,17 @@ export default function Training() {
 
                   </div>
 
-                  {ACTIVE_STATUSES.includes(
-                    normaliseStatus(
-                      selectedRun.status
+                  {(
+                    ACTIVE_STATUSES.includes(
+                      normaliseStatus(
+                        selectedRun.status
+                      )
+                    ) ||
+                    (
+                      normaliseStatus(
+                        selectedRun.status
+                      ) === "COMPLETED" &&
+                      !selectedRun.registered_model_name
                     )
                   ) && (
 
@@ -1986,7 +2314,11 @@ export default function Training() {
                       <RefreshCw
                         size={14}
                       />
-                      Sync
+                      {normaliseStatus(
+                        selectedRun.status
+                      ) === "COMPLETED"
+                        ? "Register Model"
+                        : "Sync"}
                     </button>
 
                   )}
@@ -2217,6 +2549,90 @@ export default function Training() {
 
                 </section>
 
+
+                {ACTIVE_STATUSES.includes(
+                  normaliseStatus(
+                    selectedRun.status
+                  )
+                ) && (
+                  <section className="training-detail-section">
+                    <div className="training-detail-section-title">
+                      Live Progress
+                    </div>
+
+                    <div className="training-detail-metrics">
+                      <div>
+                        <span>
+                          Elapsed
+                        </span>
+
+                        <strong>
+                          {selectedRun.started_at
+                            ? formatDuration(
+                                Math.max(
+                                  0,
+                                  (now -
+                                    new Date(
+                                      selectedRun.started_at
+                                    ).getTime()) /
+                                    1000
+                                )
+                              )
+                            : "Starting…"}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>
+                          Estimated remaining
+                        </span>
+
+                        <strong>
+                          {(() => {
+                            const config =
+                              trainingConfigs[
+                                selectedRun.azure_run_id
+                              ];
+
+                            if (!config) {
+                              return "Learning…";
+                            }
+
+                            const estimate =
+                              estimateTrainingSeconds(
+                                config,
+                                trainingRuns,
+                                trainingConfigs
+                              );
+
+                            if (
+                              estimate == null ||
+                              !selectedRun.started_at
+                            ) {
+                              return "Learning…";
+                            }
+
+                            const elapsed =
+                              Math.max(
+                                0,
+                                (now -
+                                  new Date(
+                                    selectedRun.started_at
+                                  ).getTime()) /
+                                  1000
+                              );
+
+                            return elapsed < estimate
+                              ? `~${formatDuration(
+                                  estimate - elapsed
+                                )}`
+                              : "Finishing…";
+                          })()}
+                        </strong>
+                      </div>
+                    </div>
+                  </section>
+                )}
 
                 {/* Registered model */}
 

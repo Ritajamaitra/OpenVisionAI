@@ -242,6 +242,59 @@ class AzureBlobStorage(BaseStorage):
         )
 
     # =========================================================
+    # Download Files Under Prefix
+    # =========================================================
+
+    def download_files(
+        self,
+        prefix: str,
+    ) -> dict[str, bytes]:
+        """
+        Download all files under a blob prefix.
+
+        Parameters
+        ----------
+        prefix:
+            Blob prefix, for example:
+            datasets/project_1/dataset_2/images
+
+        Returns
+        -------
+        dict[str, bytes]
+            Mapping of filename -> file bytes.
+        """
+
+        container = self.client.get_container_client(
+            settings.dataset_container
+        )
+
+        prefix = prefix.rstrip("/") + "/"
+
+        files: dict[str, bytes] = {}
+
+        for blob in container.list_blobs(
+            name_starts_with=prefix
+        ):
+            blob_path = blob.name
+
+            # Ignore virtual folders
+            if blob_path.endswith("/"):
+                continue
+
+            blob_client = self.client.get_blob_client(
+                container=settings.dataset_container,
+                blob=blob_path,
+            )
+
+            files[blob_path] = (
+                blob_client
+                .download_blob()
+                .readall()
+            )
+
+        return files
+
+    # =========================================================
     # Model
     # =========================================================
 
