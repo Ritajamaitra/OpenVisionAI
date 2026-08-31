@@ -2,7 +2,32 @@
 __pycache__/
 *.py[codz]
 *$py.class
+# Environment files
+.env
+.env.*
+!.env.example
 
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
 # C extensions
 *.so
 
