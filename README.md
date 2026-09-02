@@ -7,8 +7,8 @@ OpenVisionAI is a comprehensive computer-vision platform that helps you manage d
 
 The platform seamlessly integrates a React/TypeScript frontend, a FastAPI backend, SQL-based metadata management, Azure Machine Learning for training and model artifacts, Azure Blob/ML datastores for artifact storage, and a lightweight local inference service for serving registered YOLO models. 
 
-#Product Overview: 
-
+**Product Overview: 
+**
 OpenVisionAI is engineered for the complete computer-vision model lifecycle, including dataset management, training job evaluation, metrics, model registration, deployment/inference, and inference history and monitoring. The application offers a single workspace for both ML lifecycle operations and application-level model serving. 
 
 #Core capabilities 
@@ -49,11 +49,11 @@ Swagger/OpenAPI API documentation
 
 Responsive React frontend 
 
-#Architecture 
+**Architecture** 
 <img width="371" height="462" alt="image" src="https://github.com/user-attachments/assets/ab1d5df9-2fcc-4689-be62-43718a2b6053" />
 
-#Architectural separation 
-
+**Architectural separation 
+**
 The system is segregated into three planes: 
 
 Control plane - FastAPI handles users, metadata, projects, datasets, training runs, registered models, and inference records. ML plane - Azure ML executes training and stores training artifacts.
@@ -62,8 +62,8 @@ Serving plane - the inference service loads a registered YOLO artifact and perfo
 
 Presentation plane - the React application exposes the lifecycle through dedicated pages. 
 
-#Technology Stack 
-
+**Technology Stack 
+**
 Layer Technology 
 
 Frontend React, TypeScript, Vite 
@@ -92,7 +92,7 @@ Styling Application CSS / component-based UI
 
 Application Modules 
 
-#Dashboard 
+**Dashboard** 
 
 High-level view of the workspace and lifecycle activity. 
 
@@ -100,7 +100,7 @@ High-level view of the workspace and lifecycle activity.
 
 Projects serve as organizational boundaries for datasets and ML workflows.
 
-#Datasets 
+**Datasets** 
 
 Dataset management supports: 
 
@@ -116,7 +116,7 @@ Dataset statistics
 
 Dataset-to-model relationships 
 
-#Training 
+**Training** 
 
 Training offers: 
 
@@ -134,7 +134,7 @@ Experiment history
 
 Synchronization of completed Azure ML runs 
 
-#Models 
+**Models** 
 
 The model registry maintains: 
 
@@ -164,7 +164,7 @@ Active status
 
 The application currently demonstrates example registered models, including various versions of openvisionai-yolo. 
 
-#Inference 
+**Inference** 
 
 The inference workflow allows a user to: 
 
@@ -182,8 +182,8 @@ Review the inference ID and execution result.
 
 Inference is exposed through the backend and routed to the local inference service running on port 5001.
 
-#Inference History 
-
+**Inference History 
+**
 Inference history provides persistent monitoring of previous executions, including: 
 
 Inference ID 
@@ -204,12 +204,12 @@ Stored predictions
 
 Failure information when applicable 
 
-#Deployments 
-
+**Deployments 
+**
 The deployment module manages the application-level deployment workflows for registered models.
 
-#Authentication 
-
+**Authentication 
+**
 The login process includes: 
 
 Existing-user sign-in 
@@ -232,7 +232,8 @@ The FastAPI application provides REST endpoints documented with Swagger UI.
 
  http://127.0.0.1:8000/docs 
 
-#Local Development 
+**Local Development 
+**
 Prerequisites Install: 
 Python 3.11+ 
 Node.js / npm 
@@ -261,16 +262,16 @@ npm install
 npm run dev 
 The Vite development server typically runs at: http://localhost:5173 
 
-#Inference Service
-The local inference service loads a registered YOLO artifact and exposes a scoring endpoint. 
+**Inference Service
+**The local inference service loads a registered YOLO artifact and exposes a scoring endpoint. 
 Run it from the backend directory: 
 cd backend 
 uvicorn inference_server:app --host 127.0.0.1 --port 5001 
 The backend inference route communicates with: http://127.0.0.1:5001/score 
 Therefore, the inference service must be running when image inference is performed locally.
 
-#Azure ML Model Artifacts 
-For local inference, you can download a registered Azure ML model to the backend's models directory.
+**Azure ML Model Artifacts 
+**For local inference, you can download a registered Azure ML model to the backend's models directory.
 
 Example PowerShell command: 
 az ml model download `
@@ -283,14 +284,14 @@ PowerShell uses the backtick ` for line continuation; the Unix-style \ continuat
 
 The inference service should target the actual downloaded best.pt` artifact. 
 
-#Environment Configuration 
-Do not commit credentials, access tokens, secrets, or connection strings. 
+**Environment Configuration 
+**Do not commit credentials, access tokens, secrets, or connection strings. 
 Use environment variables for values such as:
 DATABASEURL SECRETKEY JWTSECRET AZURESUBSCRIPTIONID AZURERESOURCEGROUP AZUREMLWORKSPACE AZURESTORAGECONNECTIONSTRING 
 Ensure that the variable names match the ones expected by the current backend configuration. 
 
-Typical End-to-End Workflow 
-1.Authenticate 
+**Typical End-to-End Workflow 
+**1.Authenticate 
 Login 
 JWT token 
 Authenticated workspace 
@@ -331,8 +332,8 @@ History
 Inference executions 
 Detection / latency / status 
 
-#Model Registry Example 
-The demonstrated registry contains multiple versions of the YOLO model.
+**Model Registry Example 
+**The demonstrated registry contains multiple versions of the YOLO model.
 
 Example: 
 Model: openvisionai-yolo 
@@ -343,8 +344,8 @@ Dataset: PPE dataset variants
 Metrics: Precision / Recall / mAP@50 / mAP@50:95 
 The registry is designed to maintain the lineage between: Dataset Training Run Model Version Inference This allows the inference result to be traced back to the model and training workflow that generated it. 
 
-#Inference Data Model 
-An inference execution records information such as: 
+**Inference Data Model 
+**An inference execution records information such as: 
 { "id": 9, 
 "modelid": 3, 
 "modelname": "openvisionai-yolo", 
@@ -360,8 +361,8 @@ An inference execution records information such as:
 
 These are then translated into the Inference History monitoring view by the frontend.
 
-#Security Notes
-
+**Security Notes
+**
 - The platform uses JWT based access tokens for authentication.
 - Password reset verification should include a CAPTCHA check to allow the password-change process to proceed.
 For a full production setup of the application, the following should be addressed additionally:
@@ -390,8 +391,8 @@ For a full production setup of the application, the following should be addresse
 
 The current CAPTCHA is set up in a purely in-memory-backend mode suitable for the application's development / demo environment.
 
-#Project Structure
-
+**Project Structure
+**
 A sample structure for a repository:
 
 OpenVisionAI/
@@ -440,36 +441,47 @@ vite.config.*
 
 README.md
 
-#Screenshots
+**Screenshots**
 
 An interface is provided for each of the following tasks:
 
 - Login / Authentication
+<img width="975" height="518" alt="image" src="https://github.com/user-attachments/assets/9b3316fd-ac10-4433-930f-6e39fa5f5bf0" />
 
 - User Registration
+<img width="975" height="518" alt="image" src="https://github.com/user-attachments/assets/70611076-a0f3-4e2c-b34c-456f65b65773" />
 
 - Password Reset
+<img width="975" height="518" alt="image" src="https://github.com/user-attachments/assets/ac74c6ec-42b1-4e72-a9f4-eda9086db243" />
 
 - Dashboard
+<img width="975" height="518" alt="image" src="https://github.com/user-attachments/assets/f475b5ec-ea65-4104-8d12-ec8d288eed08" />
 
 - Projects
+<img width="975" height="518" alt="image" src="https://github.com/user-attachments/assets/e7737dbc-fa93-4cff-b43c-16201d5c5756" />
 
 - Datasets
+<img width="975" height="518" alt="image" src="https://github.com/user-attachments/assets/331d5727-dfc9-4747-8261-50dfc110e45f" />
 
 - Training
+<img width="975" height="518" alt="image" src="https://github.com/user-attachments/assets/eb20e283-4f0e-427f-8fc2-8ea9cbf1fd91" />
 
 - Models
+<img width="975" height="518" alt="image" src="https://github.com/user-attachments/assets/6fd2f8f1-8c3a-4f36-918b-7400f4956847" />
 
 - Deployments
+<img width="975" height="518" alt="image" src="https://github.com/user-attachments/assets/89c6aa9d-a570-4eca-b4b5-01340304aa9d" />
 
 - Inference
+<img width="975" height="518" alt="image" src="https://github.com/user-attachments/assets/a0e07b52-e53c-4420-a7d6-8533d718bab8" />
 
 - Inference History
+<img width="975" height="518" alt="image" src="https://github.com/user-attachments/assets/b6a36d82-2c1a-4625-a937-c9a9e420124b" />
 
 Screenshots may be hosted in a dedicated documentation / screenshots subdirectory as the general project documentation continues to take shape.
 
-#Current Project Status
-
+**Current Project Status
+**
 The project has reached Feature complete status with a development freeze. It provides the expected basic ML lifecycle:
 
 - Authentication
@@ -494,8 +506,8 @@ The project has reached Feature complete status with a development freeze. It pr
 
 The project is now ready for the next steps: documentation, testing, demonstration and preparing it for production deployment.
 
-#Future Production Extensions
-
+**Future Production Extensions
+**
 Other potential future next steps could include:
 
 - containerized backend and inference server
@@ -528,7 +540,7 @@ Other potential future next steps could include:
 This is not a part of the current freeze, just an indication for the way forward.
 
 
-#Author
+**Author**
 
 OpenVisionAI - Vision AI Model Platform
 
